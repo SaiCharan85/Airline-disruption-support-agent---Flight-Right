@@ -1,0 +1,47 @@
+# Severity tiers (FR-3). Used to design scenarios (Step 4) and by triage (Step 5).
+# The tier sets how strict the judge is (SPEC §6.2) and how fast a human must pick up a handoff (SLA).
+# When signals point to different tiers, the higher tier wins (FR-3.2).
+tiers:
+  S1:
+    name: informational
+    meaning: "No active hardship. A question about rights, status or a past disruption."
+    examples:
+      - "Flight next month was cancelled with weeks of notice; what are my options?"
+      - "Last week's flight arrived 4 hours late; can I claim compensation?"
+      - "My flight shows a 40-minute delay; am I entitled to anything?"
+  S2:
+    name: standard
+    meaning: "An active disruption with ordinary inconvenience; no vulnerability, no time-critical risk."
+    examples:
+      - "At the airport, flight delayed 3 hours, wants food vouchers and to know about compensation."
+      - "Cancelled flight tomorrow, wants rebooking options."
+  S3:
+    name: high
+    meaning: "Real hardship or high stakes: stranded overnight, a vulnerable passenger, an imminent
+      deadline, a repeat contact, or strong distress. Needs a careful, specific, fast answer."
+    signals:
+      - stranded overnight or without accommodation
+      - vulnerability flag (reduced mobility, infant, pregnant, unaccompanied minor, medical assistance)
+      - time-critical deadline within hours (onward connection, event, last train)
+      - repeat contact about the same booking (2 or more earlier contacts)
+      - frustration 4-5 or explicit distress
+  S4:
+    name: critical
+    meaning: "Safety, health or a child's welfare is at risk, or the passenger is in crisis. Always goes
+      to a human (FR-9.2); the agent may send a short, judged holding message."
+    signals:
+      - medical need that cannot wait (e.g. medication running out, health deteriorating)
+      - unaccompanied minor stranded or separated
+      - threat to personal safety
+      - acute crisis or statements of self-harm
+
+# Rule signals for the rules half of triage (FR-3.2). Weights are tuned on dev in Step 5.
+signals:
+  overnight: S3
+  vulnerability: S3
+  repeat_contact_min: 2
+  frustration_high_min: 4
+  urgency_immediate: S3
+  medical_urgent: S4
+  minor_stranded: S4
+  safety_threat: S4

@@ -62,6 +62,20 @@ class AppConfig(BaseModel):
     stores: StoresConfig
 
 
+def load_env(path: Path | None = None) -> None:
+    """Read KEY=value lines from .env into os.environ (existing variables win)."""
+    import os
+    import re
+
+    env = path or ROOT / ".env"
+    if not env.is_file():
+        return
+    for line in env.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line.strip())
+        if match and match.group(2) and not os.environ.get(match.group(1)):
+            os.environ[match.group(1)] = match.group(2)
+
+
 def load_config(path: Path | None = None) -> AppConfig:
     raw = yaml.safe_load((path or ROOT / "config" / "app_config.yaml").read_text(encoding="utf-8"))
     return AppConfig(

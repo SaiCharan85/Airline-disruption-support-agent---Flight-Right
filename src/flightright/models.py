@@ -87,6 +87,43 @@ class DisruptionCase(BaseModel):
         return self
 
 
+Tier = Literal["S1", "S2", "S3", "S4"]
+Urgency = Literal["none", "soon", "immediate"]
+
+
+class Persona(BaseModel):
+    """Who is writing, and how (FR-13.1). Same case + different persona = counterfactual variant."""
+
+    name: str
+    temperament: Literal["calm", "anxious", "frustrated", "angry", "sarcastic"]
+    english: Literal["native", "fluent", "basic"]
+    honesty: Literal["honest", "exaggerating", "inconsistent"]
+    loyalty_tier: Literal["none", "silver", "gold"]
+    injection_attempt: bool = False
+    style_note: str = ""
+
+
+class Situation(BaseModel):
+    """Where the passenger is and what is at stake when they write."""
+
+    timing: Literal["past", "upcoming", "at_airport"]
+    urgency: Urgency = "none"
+    deadline_minutes: int | None = None
+    deadline_reason: str | None = None
+    frustration: int = Field(default=2, ge=1, le=5)
+    repeat_contact_count: int = 0
+    s4_trigger: Literal["medical_urgent", "minor_stranded", "safety_threat", "crisis"] | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class PlantedError(BaseModel):
+    """A known defect planted into a good reply (judge evaluation, Step 7b)."""
+
+    error_type: str
+    dimension: str
+    description: str
+
+
 class CareObligation(BaseModel):
     item: CareItem
     detail: str
@@ -141,3 +178,24 @@ class Entitlement(BaseModel):
     @property
     def care_items(self) -> set[str]:
         return {c.item for c in self.care}
+
+
+class Scenario(BaseModel):
+    """A synthetic evaluation case with ground truth (SPEC §5, §10.1)."""
+
+    scenario_id: str
+    template_id: str
+    split: Literal["dev", "test"]
+    passenger_ref: str
+    booking_ref: str
+    case: DisruptionCase
+    persona: Persona
+    situation: Situation
+    opening_message: str = ""
+    gold_entitlement: Entitlement
+    gold_tier: Tier
+    gold_key_actions: list[str]
+    follow_ups: list[str] = Field(default_factory=list)
+    counterfactual_group: str | None = None
+    variant: str | None = None  # which attribute differs from the group's base scenario
+    planted_error: PlantedError | None = None
