@@ -1,0 +1,43 @@
+# flightright-agent configuration (SPEC §12). Sections are filled in as each step needs them.
+
+harness:
+  seed: 42
+
+regime:
+  boundary_date: "2027-10-23"     # FR-4.2: eu261_2004 before, eu261_amended_2027 from this date (verify in Step 1)
+
+# LLMs: all free (Groq + Google AI Studio free tiers; local Ollama last). Free quotas may be shared with
+# other projects on the same provider account: the usage ledger hard-stops at safety_margin x limit, then
+# the role falls back to the next model; when the chain is exhausted the conversation goes to handoff.
+# Model availability checked 2026-10-25 against the providers' model-list APIs (all catalog models live).
+# Free-tier limits are only shown per project in each console; the numbers below date from 2026-10-04..06
+# and are re-confirmed from 429 headers / consoles on the first live run (Step 5).
+# Newer Google models seen 2026-10-25, not yet evaluated: gemini-4-argon, gemini-3.7-flash, gemini-3.6-flash.
+models:
+  checked: "2026-10-25"
+  limits_checked: "2026-10-06"
+  safety_margin: 0.9
+  day_reset_utc_offset_hours: -8
+  timeout_s: 90
+  cache_path: .cache/llm/cache.sqlite3
+  usage_path: .cache/llm/usage.sqlite3
+  providers:
+    groq: {base_url: "https://api.groq.com/openai/v1", api_key_env: GROQ_API_KEY}
+    google: {base_url: "https://generativelanguage.googleapis.com/v1beta/openai", api_key_env: GOOGLE_API_KEY}
+    ollama: {base_url: "http://localhost:11434/v1", api_key_env: null}
+  catalog:   # "<provider>:<model id>" -> family (judges must differ from the agent) + free limits
+    "groq:openai/gpt-oss-120b": {family: gpt-oss, rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000}
+    "groq:openai/gpt-oss-20b": {family: gpt-oss, rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000}
+    "groq:qwen/qwen3.8-27b": {family: qwen, rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000, otpm: 1000}
+    "google:gemini-3.8-flash": {family: gemini, rpm: 10, rpd: 250, tpm: 250000}
+    "google:gemini-3.5-flash-lite": {family: gemini, rpm: 15, rpd: 1000, tpm: 250000}
+    "google:gemma-4-26b-a4b-it": {family: gemma, rpm: 15, rpd: 7200, tpm: 15000, thinking_tokens: 2048}
+    "ollama:autoclaim-judge": {family: qwen}
+  # Draft role chains (tuned in Steps 5-8). judge_a / judge_b never share the agent's family (FR-8.8).
+  roles:
+    triage: {chain: ["google:gemini-3.5-flash-lite", "groq:openai/gpt-oss-20b"]}
+    agent: {chain: ["groq:openai/gpt-oss-120b", "groq:openai/gpt-oss-20b"]}
+    judge_a: {chain: ["google:gemma-4-26b-a4b-it", "google:gemini-3.8-flash", "ollama:autoclaim-judge"]}
+    judge_b: {chain: ["groq:qwen/qwen3.8-27b", "google:gemini-3.5-flash-lite"]}
+    summary: {chain: ["google:gemini-3.5-flash-lite", "groq:openai/gpt-oss-20b"]}
+    simulator: {chain: ["google:gemini-3.5-flash-lite", "google:gemma-4-26b-a4b-it"]}

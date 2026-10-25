@@ -1,0 +1,201 @@
+# Regulation (EC) No 261/2004 as amended by Regulation (EU) 2026/2202 (OJ L, 2.10.2026; in force 22.10.2026,
+# applies from 23.10.2027). Plain-English notes: docs/regulation_notes.md.
+# Article numbers follow the published OJ text, where several paragraphs were renumbered relative to the
+# June 2026 joint text (PE-CONS 39/26); the joint-text number is given as "jt" where it differs.
+ruleset: eu261_amended_2027
+version: "2027.1"
+checked: "2026-10-25"                            # English OJ text still not retrievable from EUR-Lex on this date
+applies_to:
+  scheduled_departure_from: "2027-10-23"        # mirrors config/app_config.yaml regime.boundary_date
+  # Art. 3 of 2026/2202 sets only entry-into-force and application dates; there is no transitional rule
+  # for bookings made before 23.10.2027 for flights departing after it.
+  booked_before_boundary: {assumed_regime: eu261_amended_2027}
+sources:
+  - {doc: "Regulation (EU) 2026/2202, OJ L, 2.10.2026", url: "http://data.europa.eu/eli/reg/2026/2202/oj"}
+  - {doc: "OJ text (Spanish), BOE mirror", url: "https://www.boe.es/doue/2026/2202/L00001-00045.pdf"}
+  - {doc: "Joint text PE-CONS 39/26 (English, pre legal-linguistic revision)", url: "https://data.consilium.europa.eu/doc/document/PE-39-2026-INIT/en/pdf"}
+
+scope:
+  departure_from_eu: {article: "3(1)(a)"}
+  arrival_in_eu_on_eu_carrier:
+    article: "3(1)(b)"
+    carrier_basis: operating                     # Art. 3(5)
+    third_country_benefits_exception:
+      requires_all: [benefits, compensation, assistance]   # "equivalent" benefits received in the third country
+      action: review
+  excluded_fares: [free_of_charge, non_public_reduced_fare]     # Art. 3(3)
+  included_fares: [frequent_flyer]
+  art7_excluded_passengers: [infant_free, prm_companion_free]   # Art. 3(3): all rights except Art. 7
+  greenland_connections_no_art7: true                           # Art. 3(7)
+  journey_definition: single_air_transport_contract_outbound_return_separate   # Art. 2(v)
+  aircraft: motorised_fixed_wing
+  territory:
+    eu_member_states: true
+    eea_and_switzerland: true                    # depends on EEA / EU-CH incorporation decisions
+    united_kingdom: false
+
+distance:
+  method: great_circle
+  earth_radius_km: 6371.0
+  compensation_basis: origin_to_final_destination   # Art. 7(5) (jt 7(3)): connecting points ignored
+  care_trigger_basis: none                           # care no longer depends on distance
+  boundary_tolerance_km: 10
+
+compensation:
+  bands:                                         # Art. 7(1): unchanged amounts, now per journey
+    - {id: a, eur: 250, max_km: 1500, max_comparison: lte, article: "7(1)(a)"}
+    - {id: b, eur: 400, intra_eu_min_km: 1500, intra_eu_min_comparison: gt, other_max_km: 3500, other_max_comparison: lte, article: "7(1)(b)"}
+    - {id: c, eur: 600, article: "7(1)(c)"}
+  boundary_3500_km: {assumed_band: b}
+  delay:
+    trigger_minutes: 180
+    comparison: gt                               # Art. 6(4): "exceeding three hours"
+    measured_at: final_destination
+    reference_arrival: ticket_at_booking_or_reschedule_14_days   # Art. 2(o)
+    arrival_event: on_block                      # Art. 2(x)
+    articles: ["6(4)", "7(1)", "2(o)", "2(x)"]
+  reduction_on_rerouting:                        # Art. 7(2): only band c, carrier MAY reduce by 50 %
+    optional_for_carrier: true
+    factor: 0.5
+    bands: [c]
+    arrival_delay_max_minutes: 240
+    comparison: lte                              # "no supera en cuatro horas"
+    applies_to: [cancellation, denied_boarding, delay, missed_connection]
+  earlier_departure_reduction:                   # Art. 7(3) (jt 7(2c)): rerouted journey departs > 1 h early
+    # factor = share of the compensation still paid: "reduced by 50 %" -> 0.5, "reduced by 25 %" -> 0.75
+    requires_flight_taken: true
+    tiers:
+      - {brought_forward_min_minutes: 60, brought_forward_max_minutes: 120, max_comparison: lt, factor: 0.5}
+      - {brought_forward_min_minutes: 120, brought_forward_max_minutes: 180, max_comparison: lt, factor: 0.75}
+  payment: {default: bank_transfer, article: "7(7)"}   # other means only with agreement
+  carrier_information_hours: 96                  # Art. 7(4): rights info within 96 h of journey end
+
+cancellation:
+  definition_article: "2(l)"
+  brought_forward_minutes_counts_as_cancellation: 60   # Art. 2(l)(ii): brought forward by more than 1 h
+  notice_rules:                                  # Art. 5(5) (jt 5(6)): compensation NOT due if any rule matches
+    - {id: fourteen_days, article: "5(5)", notice_days_min: 14}
+    - {id: under_fourteen, article: "5(5)", notice_days_max_exclusive: 14,
+       reroute_departure_early_max_minutes: 60, departure_comparison: lte,
+       reroute_arrival_late_max_minutes: 120, arrival_comparison: lt}
+  notice_unknown: compensation_due               # burden of proof on the carrier
+  diversion_same_region:                         # Art. 5(6) (jt 5(6a))
+    no_rights_if_arrival_delay_max_minutes: 180
+    comparison: lte
+    carrier_transfers_to_ticketed_airport: required
+    not_for_special_needs_unable_to_use_transfer: true
+  articles: ["5(3)", "5(5)", "5(6)", "2(l)"]
+
+denied_boarding:
+  gate_presentation_minutes_before_departure: 45  # Art. 4(1), if no time indicated
+  volunteers:
+    agreed_benefit_replaces_art7_only_with_durable_medium_consent: true   # Art. 4(2)
+    otherwise_compensation_within_days: 7
+  involuntary: {art7_compensation: true, art8_assistance: true, art9_care: true,
+                refreshments: immediate, compensation_within_days: 7, refund_within_days: 7}   # Art. 4(4)
+  special_needs_protected: true                  # Art. 4(3)
+  not_denied_boarding_reasons: [health, safety, security, inadequate_travel_documentation]   # Art. 2(j)
+  no_show_policy_on_return_forbidden: true       # Art. 4(5)
+  extraordinary_circumstances_defence: false
+
+missed_connection:
+  article: "6b"
+  single_contract_required: true
+  responsible_carrier: preceding_flight_operator # Art. 6b(1); compensation payer wording differs JT vs OJ
+  refund_option_if_no_reroute_within_minutes: 300   # Art. 6b(2)
+  compensation_if_arrival_delay_minutes: 180     # Art. 6b(3), measured at final destination
+  comparison: gt
+  separate_tickets: no_art7_8_9                  # Art. 14(3): must be disclosed before purchase
+
+extraordinary_circumstances:
+  definition_article: "2(r)"
+  annex_non_exhaustive: true                     # Art. 6c(1)
+  burden_and_causal_link: "6c(2)"                # carrier proves event + unavoidable + direct causal link
+  carrier_must_name_annex_item: "7(9)"
+  removes: [compensation]
+  never_removes: [care, refund_or_rerouting]     # hotel may be capped at 3 nights (care.hotel)
+  cause_codes:
+    natural_disaster: {class: extraordinary, source: "Annex 1(a)"}
+    weather_unsafe: {class: extraordinary, source: "Annex 1(c)"}
+    war_insurrection: {class: extraordinary, source: "Annex 1(d)"}
+    health_threat: {class: extraordinary, source: "Annex 1(e)"}
+    unruly_passenger_diversion: {class: extraordinary, source: "Annex 2(a): unless the carrier caused it"}
+    medical_emergency_onboard: {class: extraordinary, source: "Annex 2(b)"}
+    security_risk: {class: extraordinary, source: "Annex 3(a)-(b)"}
+    hidden_manufacturing_defect: {class: extraordinary, source: "Annex 3(c): revealed by manufacturer or authority"}
+    atc_restriction: {class: extraordinary, source: "Annex 3(d)"}
+    airport_closure: {class: extraordinary, source: "Annex 3(d)-(e)"}
+    fuel_system_failure: {class: extraordinary, source: "Annex 3(f)"}
+    third_party_strike: {class: extraordinary, source: "Annex 3(g): essential service providers"}
+    own_staff_strike_public_authority_demands: {class: extraordinary, source: "Annex 3(h)"}
+    bird_strike: {class: extraordinary, source: "Annex 3(i): animals / foreign objects"}
+    contaminated_runway: {class: extraordinary, source: "Annex 3(j)"}
+    crew_medical_emergency_after_departure: {class: extraordinary, source: "Annex 3(k)"}
+    technical_fault: {class: ordinary, source: "not in Annex; only hidden defects revealed by others"}
+    own_staff_strike: {class: ordinary, source: "Annex 3(h): covers only public-authority demands"}
+    wildcat_strike: {class: ordinary, source: "not in Annex"}
+    crew_shortage: {class: ordinary, source: "inherent in normal activity"}
+    overbooking: {class: ordinary, source: "Art. 4"}
+    operational: {class: ordinary, source: "inherent in normal activity"}
+    earlier_rotation_extraordinary: {class: review, source: "not addressed in the amended text"}
+    unknown: {class: review, source: "carrier must prove the defence"}
+
+care:
+  article: "9"
+  delay: from_scheduled_departure                # Art. 6(2); recital 31; no distance thresholds
+  items:
+    refreshments: {article: "9(1)(a)", every_minutes_of_waiting: 120}
+    meals: {article: "9(1)(b)", first_after_minutes: 180, then_every_minutes: 300, max_per_day: 3}
+    communications: {article: "9(1)(c)", internet: true, calls: 2}
+    hotel: {article: "9(2)", when: overnight_stay_needed, cap_eur: null,
+            cap_nights_extraordinary: 3, cap_not_for_special_needs: true}   # Art. 9(6), 11(10)
+    hotel_transport: {article: "9(2)", when: overnight_stay_needed}
+  may_limit_if_further_delays_departure: true    # Art. 9(1) second subparagraph; "very exceptional" (recital 30)
+  self_arranged_reimbursement_days: 14           # Art. 9(4); 30 under airport contingency plan
+  ends_on: [refund_at_origin, reroute_later_date]   # Art. 9(7)
+  night_definition: "00:00-06:00"               # Art. 2(z)
+  cancellation: {article: "5(3)", when_notice_days_max: 0}   # same waiting-time reading as the 2004 ruleset
+  denied_boarding: {article: "4(4)"}             # refreshments immediately
+  special_needs_any_delay: true                  # Art. 11(9): "as soon as possible"
+  delay_refund_option_minutes: 300               # Art. 6(3): departure delay reaches five hours
+  delay_refund_comparison: gte
+
+refund_or_rerouting:
+  article: "8"
+  refund_within_days: 7                          # automatic, bank transfer; 30 under contingency plan
+  options: [refund, reroute_earliest, reroute_later_date]
+  reroute_offer_must_include_one_of: [same_route, different_routing, alternative_airport, other_carrier, other_mode]
+  self_reroute:
+    if_not_offered_within_minutes: 180           # Art. 8(3); from scheduled departure for cancellations
+    reimbursement_cap_pct_of_ticket: 400
+    reimbursed_within_days: 14
+  original_carrier_liable_for_compensation: true # Art. 8(2)
+
+vouchers:
+  article: "8a"
+  requires: explicit_consent_durable_medium      # Art. 8a(2)
+  min_value: refund_or_compensation_due          # Art. 8a(1)
+  validity_months: 12                            # extendable once by 12 months
+  unredeemed_refund_within_days: 7               # Art. 8a(6)
+  cash_right_must_be_stated: true
+
+claim_deadline:
+  in_regulation: "9 months from the actual date of departure on the ticket"   # Art. 7(9) (jt 7(5))
+  months: 9
+  from: actual_departure_date
+  carrier_reply_days: 30
+  complaint_deadline: "12 months after the flight, or 3 months after the compensation request if later"   # Art. 15a(2)
+
+special_needs:
+  categories: [reduced_mobility, disability, pregnant, infant, unaccompanied_minor, medical_assistance]   # Art. 11(3)
+  pregnant_and_prm_notice_required: true         # at the latest when informed of the disruption
+  companion_adjacent_seat_free: true             # Art. 11(4), incl. companions of a child under 14
+  priority: true
+
+unverified:
+  - applies_to.booked_before_boundary            # no transitional rule in 2026/2202
+  - scope.territory.eea_and_switzerland           # not in the text; depends on incorporation decisions
+  - compensation.boundary_3500_km
+  - missed_connection.responsible_carrier         # "disrupted flight" (JT) vs "delayed flight" (OJ ES)
+  - compensation.earlier_departure_reduction      # optional ("may") or automatic: English OJ wording to confirm
+  - extraordinary_circumstances.cause_codes.earlier_rotation_extraordinary

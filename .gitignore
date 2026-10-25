@@ -1,0 +1,40 @@
+# --- Project: never commit data, weights, indexes, secrets, caches ---
+data/
+models/
+.env
+.env.*
+!.env.example
+.cache/
+*.faiss
+checkpoints/
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# --- Tooling ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+.langgraph_api/
+
+# --- n8n local state (workflows are exported to n8n/workflows/) ---
+n8n/data/
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

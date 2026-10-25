@@ -1,0 +1,356 @@
+# Golden entitlement cases, each worked by hand from docs/regulation_notes.md.
+# Inputs are a compact DisruptionCase (delays in whole minutes; door-open / on-block arrival).
+# Distances: great-circle, mean Earth radius; routes are chosen well away from band edges.
+#   MAD-BCN 483 km · FCO-HAM 1326 km (via BRU 1655 km flown) · LHR-CDG 347 km · ATH-FRA 1816 km
+#   FRA-LIS 1874 km · AMS-IST 2184 km · MUC-DXB 4564 km · CDG-JFK 5834 km
+# expected.care uses these tokens: meals_refreshments, refreshments, meals, communications, hotel,
+# hotel_transport, refreshments_immediate. may_reduce_to_eur is what the carrier MAY pay instead (optional).
+# Cancellation care (meals, calls, hotel) applies when the passenger learns of it on the day of travel or the
+# notice date is unknown; with earlier notice there is no airport wait (docs/regulation_notes.md §10).
+defaults_2004: &d2004
+  booking_date: "2027-01-10"
+  carrier_iata: IB
+  carrier_is_eu: true
+  passenger_flags: []
+  check_in_ok: true
+defaults_2027: &d2027
+  booking_date: "2027-10-25"
+  carrier_iata: LH
+  carrier_is_eu: true
+  passenger_flags: []
+  check_in_ok: true
+
+cases:
+  # ------------------------------------------------------------------ eu261_2004: delays
+  - id: G2004-01
+    title: Short-haul delay, 3h10 at arrival, technical fault
+    case: {<<: *d2004, origin_iata: MAD, final_destination_iata: BCN, scheduled_departure: "2027-03-15T08:00:00+01:00",
+           disruption_type: delay, cause_code: technical_fault, departure_delay_minutes: 185, arrival_delay_minutes: 190}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: false, confidence: verified,
+               articles: ["7(1)(a)", "6(1)(a)", "9", "C-402/07 Sturgeon", "C-549/07 Wallentin-Hermann"]}
+
+  - id: G2004-02
+    title: Short-haul delay, 2h59 at arrival (no compensation, care from 2h)
+    case: {<<: *d2004, origin_iata: MAD, final_destination_iata: BCN, scheduled_departure: "2027-03-15T08:00:00+01:00",
+           disruption_type: delay, cause_code: operational, departure_delay_minutes: 170, arrival_delay_minutes: 179}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: false, confidence: verified,
+               articles: ["6(1)(a)", "9", "C-402/07 Sturgeon"]}
+
+  - id: G2004-03
+    title: Exactly 3h00 at arrival counts ("three hours or more")
+    case: {<<: *d2004, origin_iata: FRA, final_destination_iata: LIS, carrier_iata: LH, scheduled_departure: "2027-03-15T09:00:00+01:00",
+           disruption_type: delay, cause_code: crew_shortage, departure_delay_minutes: 175, arrival_delay_minutes: 180}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 400, may_reduce_to_eur: null,
+               care: [], refund_option: false, confidence: verified,
+               articles: ["7(1)(b)", "C-581/10 Nelson"]}
+    note: Departure delay 2h55 is below the 3h care trigger for a 1874 km flight (Art. 6(1)(b)).
+
+  - id: G2004-04
+    title: Long-haul delay of 3h30 at arrival (Sturgeon reduction may apply)
+    case: {<<: *d2004, origin_iata: CDG, final_destination_iata: JFK, carrier_iata: AF, scheduled_departure: "2027-03-15T10:00:00+01:00",
+           disruption_type: delay, cause_code: technical_fault, departure_delay_minutes: 200, arrival_delay_minutes: 210}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 600, may_reduce_to_eur: 300,
+               care: [], refund_option: false, confidence: unverified,
+               articles: ["7(1)(c)", "7(2)(c)", "C-402/07 Sturgeon"]}
+    note: Unverified because compensation.reduction_on_rerouting.delay_long_haul is unverified -> handoff.
+
+  - id: G2004-05
+    title: Long-haul delay of 5h30, refund option and care
+    case: {<<: *d2004, origin_iata: CDG, final_destination_iata: JFK, carrier_iata: AF, scheduled_departure: "2027-03-15T10:00:00+01:00",
+           disruption_type: delay, cause_code: technical_fault, departure_delay_minutes: 330, arrival_delay_minutes: 320}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 600, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: true, confidence: verified,
+               articles: ["7(1)(c)", "6(1)(c)", "6(1)(iii)", "8(1)(a)", "9"]}
+
+  - id: G2004-06
+    title: Third country to EU on a non-EU carrier is out of scope
+    case: {<<: *d2004, origin_iata: JFK, final_destination_iata: CDG, carrier_iata: DL, carrier_is_eu: false,
+           scheduled_departure: "2027-03-15T18:00:00-04:00", disruption_type: delay, cause_code: technical_fault,
+           departure_delay_minutes: 360, arrival_delay_minutes: 360}
+    expected: {regime: eu261_2004, in_scope: false, compensation_eur: null, may_reduce_to_eur: null,
+               care: [], refund_option: false, confidence: verified, articles: ["3(1)"]}
+
+  - id: G2004-07
+    title: Third country to EU on an EU carrier is in scope
+    case: {<<: *d2004, origin_iata: JFK, final_destination_iata: CDG, carrier_iata: AF,
+           scheduled_departure: "2027-03-15T18:00:00-04:00", disruption_type: delay, cause_code: technical_fault,
+           departure_delay_minutes: 360, arrival_delay_minutes: 360}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 600, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: true, confidence: verified,
+               articles: ["3(1)(b)", "7(1)(c)", "6(1)(c)", "8(1)(a)"]}
+
+  - id: G2004-08
+    title: Bird strike delay is extraordinary, care still owed
+    case: {<<: *d2004, origin_iata: ATH, final_destination_iata: FRA, carrier_iata: A3, scheduled_departure: "2027-03-15T07:00:00+02:00",
+           disruption_type: delay, cause_code: bird_strike, departure_delay_minutes: 240, arrival_delay_minutes: 245}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: false, confidence: verified,
+               articles: ["5(3)", "6(1)(b)", "9", "C-315/15 Pešková", "C-12/11 McDonagh"]}
+
+  - id: G2004-09
+    title: Knock-on delay from weather on the previous rotation needs review
+    case: {<<: *d2004, origin_iata: FRA, final_destination_iata: LIS, carrier_iata: LH, scheduled_departure: "2027-03-15T15:00:00+01:00",
+           disruption_type: delay, cause_code: earlier_rotation_extraordinary, departure_delay_minutes: 230, arrival_delay_minutes: 225}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: false, confidence: unverified,
+               articles: ["5(3)", "6(1)(b)", "C-74/19 LE v TAP"]}
+    note: Cause class "review" -> compensation not stated, handoff.
+
+  - id: G2004-10
+    title: Passenger with reduced mobility, 1h delay, care as soon as possible
+    case: {<<: *d2004, origin_iata: MAD, final_destination_iata: BCN, scheduled_departure: "2027-03-15T08:00:00+01:00",
+           disruption_type: delay, cause_code: operational, departure_delay_minutes: 60, arrival_delay_minutes: 55,
+           passenger_flags: [reduced_mobility]}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: false, confidence: verified,
+               articles: ["11(2)", "9"]}
+
+  - id: G2004-11
+    title: Staff ticket is out of scope
+    case: {<<: *d2004, origin_iata: MAD, final_destination_iata: BCN, scheduled_departure: "2027-03-15T08:00:00+01:00",
+           disruption_type: delay, cause_code: technical_fault, departure_delay_minutes: 240, arrival_delay_minutes: 240,
+           fare_type: staff_fare}
+    expected: {regime: eu261_2004, in_scope: false, compensation_eur: null, may_reduce_to_eur: null,
+               care: [], refund_option: false, confidence: verified, articles: ["3(3)"]}
+
+  - id: G2004-12
+    title: UK departure on a UK carrier is out of scope (UK261 not covered)
+    case: {<<: *d2004, origin_iata: LHR, final_destination_iata: CDG, carrier_iata: BA, carrier_is_eu: false,
+           scheduled_departure: "2027-03-15T08:00:00+00:00", disruption_type: delay, cause_code: technical_fault,
+           departure_delay_minutes: 240, arrival_delay_minutes: 240}
+    expected: {regime: eu261_2004, in_scope: false, compensation_eur: null, may_reduce_to_eur: null,
+               care: [], refund_option: false, confidence: verified, articles: ["3(1)"]}
+
+  - id: G2004-13
+    title: UK departure on an EU carrier into the EU is in scope
+    case: {<<: *d2004, origin_iata: LHR, final_destination_iata: CDG, carrier_iata: AF,
+           scheduled_departure: "2027-03-15T08:00:00+00:00", disruption_type: delay, cause_code: technical_fault,
+           departure_delay_minutes: 240, arrival_delay_minutes: 240}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: false, confidence: verified,
+               articles: ["3(1)(b)", "7(1)(a)", "6(1)(a)", "9"]}
+
+  # ------------------------------------------------------------------ eu261_2004: cancellations
+  - id: G2004-14
+    title: Cancellation with 15 days notice, no compensation
+    case: {<<: *d2004, origin_iata: FRA, final_destination_iata: LIS, carrier_iata: LH, scheduled_departure: "2027-03-15T09:00:00+01:00",
+           disruption_type: cancellation, cause_code: operational, notice_given_days: 15}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [], refund_option: true, confidence: verified, articles: ["5(1)(c)(i)", "8(1)"]}
+
+  - id: G2004-15
+    title: Cancellation with 10 days notice, rerouted 1h early and 3h late (inside the 2h/4h window)
+    case: {<<: *d2004, origin_iata: FRA, final_destination_iata: LIS, carrier_iata: LH, scheduled_departure: "2027-03-15T09:00:00+01:00",
+           disruption_type: cancellation, cause_code: operational, notice_given_days: 10,
+           rerouting_offered: {departure_early_minutes: 60, arrival_late_minutes: 180}}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [], refund_option: true, confidence: verified, articles: ["5(1)(c)(ii)", "8(1)"]}
+    counterfactual_of: G2027-03
+
+  - id: G2004-16
+    title: Cancellation with 3 days notice, rerouted 3h late (outside 1h/2h, 50 % reduction may apply)
+    case: {<<: *d2004, origin_iata: FRA, final_destination_iata: LIS, carrier_iata: LH, scheduled_departure: "2027-03-15T09:00:00+01:00",
+           disruption_type: cancellation, cause_code: crew_shortage, notice_given_days: 3,
+           rerouting_offered: {departure_early_minutes: 0, arrival_late_minutes: 180}}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 400, may_reduce_to_eur: 200,
+               care: [], refund_option: true, confidence: verified,
+               articles: ["5(1)(c)(iii)", "7(1)(b)", "7(2)(b)"]}
+
+  - id: G2004-17
+    title: Weather cancellation on the day, overnight wait; no compensation, full care
+    case: {<<: *d2004, origin_iata: AMS, final_destination_iata: IST, carrier_iata: KL, scheduled_departure: "2027-03-15T20:00:00+01:00",
+           disruption_type: cancellation, cause_code: weather_unsafe, notice_given_days: 0, nights_needed: 1,
+           rerouting_offered: {departure_early_minutes: 0, arrival_late_minutes: 900}}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications, hotel, hotel_transport], refund_option: true, confidence: verified,
+               articles: ["5(3)", "5(1)(b)", "9", "C-12/11 McDonagh"]}
+
+  - id: G2004-18
+    title: Cancellation caused by the carrier's own staff strike, compensation owed
+    case: {<<: *d2004, origin_iata: AMS, final_destination_iata: IST, carrier_iata: KL, scheduled_departure: "2027-03-15T09:00:00+01:00",
+           disruption_type: cancellation, cause_code: own_staff_strike, notice_given_days: 2,
+           rerouting_offered: {departure_early_minutes: 0, arrival_late_minutes: 300}}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 400, may_reduce_to_eur: null,
+               care: [], refund_option: true, confidence: verified,
+               articles: ["5(1)(c)", "7(1)(b)", "C-28/20 Airhelp v SAS"]}
+    note: Non-EU destination, 2184 km -> band b; arrival 5h late exceeds the 3h reduction window.
+
+  - id: G2004-19
+    title: Cancellation with unknown notice date, burden on the carrier
+    case: {<<: *d2004, origin_iata: MAD, final_destination_iata: BCN, scheduled_departure: "2027-03-15T08:00:00+01:00",
+           disruption_type: cancellation, cause_code: operational, notice_given_days: null}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: true, confidence: verified,
+               articles: ["5(4)", "7(1)(a)"]}
+
+  # ------------------------------------------------------------------ eu261_2004: denied boarding, connections
+  - id: G2004-20
+    title: Involuntary denied boarding (overbooking)
+    case: {<<: *d2004, origin_iata: MAD, final_destination_iata: BCN, scheduled_departure: "2027-03-15T08:00:00+01:00",
+           disruption_type: denied_boarding, cause_code: overbooking, volunteer: false}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: true, confidence: verified,
+               articles: ["4(3)", "7(1)(a)", "8", "9"]}
+
+  - id: G2004-21
+    title: Boarding refused for inadequate travel documents is not denied boarding
+    case: {<<: *d2004, origin_iata: MAD, final_destination_iata: BCN, scheduled_departure: "2027-03-15T08:00:00+01:00",
+           disruption_type: denied_boarding, cause_code: inadequate_travel_documentation, volunteer: false}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [], refund_option: false, confidence: verified, articles: ["2(j)"]}
+
+  - id: G2004-22
+    title: Missed connection on one booking, distance origin to final destination (Bossen)
+    case: {<<: *d2004, origin_iata: FCO, connection_iatas: [BRU], final_destination_iata: HAM, carrier_iata: SN,
+           scheduled_departure: "2027-03-15T07:00:00+01:00", disruption_type: missed_connection, cause_code: technical_fault,
+           single_booking: true, departure_delay_minutes: 90, connection_departure_delay_minutes: 240,
+           arrival_delay_minutes: 250}
+    expected: {regime: eu261_2004, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [meals_refreshments, communications], refund_option: false, confidence: verified,
+               articles: ["7(1)(a)", "6(1)(a)", "9", "C-11/11 Folkerts", "C-559/16 Bossen"]}
+    note: >-
+      1326 km direct (band a), not 1655 km flown (band b). Care is owed at the transfer airport
+      (onward departure 4h after the missed flight; BRU-HAM 482 km -> 2h trigger).
+
+  # ------------------------------------------------------------------ eu261_amended_2027
+  - id: G2027-01
+    title: Intra-EU delay of 3h10 at arrival
+    case: {<<: *d2027, origin_iata: FRA, final_destination_iata: LIS, scheduled_departure: "2027-11-15T09:00:00+01:00",
+           disruption_type: delay, cause_code: technical_fault, departure_delay_minutes: 185, arrival_delay_minutes: 190}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 400, may_reduce_to_eur: null,
+               care: [refreshments, meals, communications], refund_option: false, confidence: verified,
+               articles: ["6(4)", "7(1)(b)", "6(2)", "9(1)"]}
+
+  - id: G2027-02
+    title: Exactly 3h00 at arrival does not exceed three hours
+    case: {<<: *d2027, origin_iata: FRA, final_destination_iata: LIS, scheduled_departure: "2027-11-15T09:00:00+01:00",
+           disruption_type: delay, cause_code: technical_fault, departure_delay_minutes: 175, arrival_delay_minutes: 180}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [refreshments, communications], refund_option: false, confidence: verified,
+               articles: ["6(4)", "6(2)", "9(1)"]}
+    counterfactual_of: G2004-03
+    note: Departure delay 2h55 -> first refreshment due (2h), first meal not yet due (3h).
+
+  - id: G2027-03
+    title: Cancellation with 10 days notice, rerouted 1h early and 3h late (compensation owed now)
+    case: {<<: *d2027, origin_iata: FRA, final_destination_iata: LIS, scheduled_departure: "2027-11-15T09:00:00+01:00",
+           disruption_type: cancellation, cause_code: operational, notice_given_days: 10,
+           rerouting_offered: {departure_early_minutes: 60, arrival_late_minutes: 180}}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 400, may_reduce_to_eur: null,
+               care: [], refund_option: true, confidence: verified,
+               articles: ["5(5)", "7(1)(b)", "8(1)"]}
+    counterfactual_of: G2004-15
+    note: The 7-14 day tier no longer exists; arrival 3h late exceeds the < 2h window. 50 % reduction is band c only.
+
+  - id: G2027-04
+    title: Cancellation with 14 days notice, no compensation
+    case: {<<: *d2027, origin_iata: FRA, final_destination_iata: LIS, scheduled_departure: "2027-11-15T09:00:00+01:00",
+           disruption_type: cancellation, cause_code: operational, notice_given_days: 14}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [], refund_option: true, confidence: verified, articles: ["5(5)", "8(1)"]}
+
+  - id: G2027-05
+    title: Long-haul delay of 3h30, 50 % reduction may apply (band c only)
+    case: {<<: *d2027, origin_iata: CDG, final_destination_iata: JFK, carrier_iata: AF, scheduled_departure: "2027-11-15T10:00:00+01:00",
+           disruption_type: delay, cause_code: technical_fault, departure_delay_minutes: 200, arrival_delay_minutes: 210}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 600, may_reduce_to_eur: 300,
+               care: [refreshments, meals, communications], refund_option: false, confidence: verified,
+               articles: ["6(4)", "7(1)(c)", "7(2)", "9(1)"]}
+    counterfactual_of: G2004-04
+
+  - id: G2027-06
+    title: Technical fault is not extraordinary under the Annex
+    case: {<<: *d2027, origin_iata: MUC, final_destination_iata: DXB, scheduled_departure: "2027-11-15T13:00:00+01:00",
+           disruption_type: cancellation, cause_code: technical_fault, notice_given_days: 0,
+           rerouting_offered: {departure_early_minutes: 0, arrival_late_minutes: 600}}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 600, may_reduce_to_eur: null,
+               care: [refreshments, meals, communications], refund_option: true, confidence: verified,
+               articles: ["5(5)", "7(1)(c)", "6c", "Annex"]}
+
+  - id: G2027-07
+    title: Hidden manufacturing defect revealed by the authority is extraordinary
+    case: {<<: *d2027, origin_iata: MUC, final_destination_iata: DXB, scheduled_departure: "2027-11-15T13:00:00+01:00",
+           disruption_type: cancellation, cause_code: hidden_manufacturing_defect, notice_given_days: 0,
+           rerouting_offered: {departure_early_minutes: 0, arrival_late_minutes: 600}}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [refreshments, meals, communications], refund_option: true, confidence: verified,
+               articles: ["6c", "Annex 3(c)", "5(3)"]}
+
+  - id: G2027-08
+    title: Weather cancellation, 4 nights needed; hotel capped at 3 nights
+    case: {<<: *d2027, origin_iata: AMS, final_destination_iata: IST, carrier_iata: KL, scheduled_departure: "2027-11-15T20:00:00+01:00",
+           disruption_type: cancellation, cause_code: weather_unsafe, notice_given_days: 0, nights_needed: 4}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [refreshments, meals, communications, hotel, hotel_transport], hotel_nights_owed: 3,
+               refund_option: true, confidence: verified, articles: ["Annex 1(c)", "9(2)", "9(6)"]}
+
+  - id: G2027-09
+    title: Same weather cancellation for a passenger needing medical assistance; no hotel cap
+    case: {<<: *d2027, origin_iata: AMS, final_destination_iata: IST, carrier_iata: KL, scheduled_departure: "2027-11-15T20:00:00+01:00",
+           disruption_type: cancellation, cause_code: weather_unsafe, notice_given_days: 0, nights_needed: 4,
+           passenger_flags: [medical_assistance]}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: null, may_reduce_to_eur: null,
+               care: [refreshments, meals, communications, hotel, hotel_transport], hotel_nights_owed: 4,
+               refund_option: true, confidence: verified, articles: ["Annex 1(c)", "9(2)", "11(10)"]}
+    counterfactual_of: G2027-08
+
+  - id: G2027-10
+    title: Own staff strike over pay is not extraordinary
+    case: {<<: *d2027, origin_iata: MAD, final_destination_iata: BCN, carrier_iata: IB, scheduled_departure: "2027-11-15T08:00:00+01:00",
+           disruption_type: cancellation, cause_code: own_staff_strike, notice_given_days: 1}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [], refund_option: true, confidence: verified,
+               articles: ["5(5)", "7(1)(a)", "Annex 3(h)"]}
+
+  - id: G2027-11
+    title: Booked before 23.10.2027, departing after it (no transitional rule)
+    case: {<<: *d2027, booking_date: "2027-09-01", origin_iata: FRA, final_destination_iata: LIS,
+           scheduled_departure: "2027-11-05T09:00:00+01:00", disruption_type: delay, cause_code: technical_fault,
+           departure_delay_minutes: 230, arrival_delay_minutes: 240}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 400, may_reduce_to_eur: null,
+               care: [refreshments, meals, communications], refund_option: false, confidence: unverified,
+               articles: ["Reg. 2026/2202 Art. 3", "6(4)", "7(1)(b)"]}
+    note: Same amount under both regimes here, but the regime choice itself is unverified -> handoff.
+
+  - id: G2027-12
+    title: Departure brought forward by 1h30 counts as a cancellation
+    case: {<<: *d2027, origin_iata: MAD, final_destination_iata: BCN, carrier_iata: IB, scheduled_departure: "2027-11-15T08:00:00+01:00",
+           disruption_type: cancellation, cause_code: operational, notice_given_days: 3, brought_forward_minutes: 90,
+           rerouting_offered: {departure_early_minutes: 90, arrival_late_minutes: -90, taken: true}}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 250, may_reduce_to_eur: 125,
+               care: [], refund_option: true, confidence: unverified,
+               articles: ["2(l)(ii)", "5(5)", "7(1)(a)", "7(3)(a)"]}
+    note: >-
+      Departing > 1h early fails the under-14-days window; flight taken 1h30 early -> reduced by 50 %
+      (Art. 7(3)(a)). Unverified: whether that reduction is optional for the carrier or automatic.
+
+  - id: G2027-13
+    title: Missed connection on one contract, 4h late at the final destination
+    case: {<<: *d2027, origin_iata: FCO, connection_iatas: [BRU], final_destination_iata: HAM, carrier_iata: SN,
+           scheduled_departure: "2027-11-15T07:00:00+01:00", disruption_type: missed_connection, cause_code: technical_fault,
+           single_booking: true, departure_delay_minutes: 90, connection_departure_delay_minutes: 240,
+           arrival_delay_minutes: 250}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [refreshments, meals, communications], refund_option: false, confidence: unverified,
+               articles: ["6b(1)", "6b(3)", "7(1)(a)", "7(5)", "9(1)"]}
+    note: Amount is verified (1326 km direct); payer wording (missed_connection.responsible_carrier) is unverified.
+
+  - id: G2027-14
+    title: Involuntary denied boarding, refreshments immediately, payment within 7 days
+    case: {<<: *d2027, origin_iata: VIE, final_destination_iata: LIS, carrier_iata: OS, scheduled_departure: "2027-11-15T08:00:00+01:00",
+           disruption_type: denied_boarding, cause_code: overbooking, volunteer: false}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 400, may_reduce_to_eur: null,
+               care: [refreshments_immediate, communications], refund_option: true, confidence: verified,
+               articles: ["4(4)", "7(1)(b)", "8", "9"]}
+    note: VIE-LIS 2305 km intra-EU -> band b.
+
+  - id: G2027-15
+    title: Voucher-only offer without cash alternative is not compliant
+    case: {<<: *d2027, origin_iata: MAD, final_destination_iata: BCN, carrier_iata: IB, scheduled_departure: "2027-11-15T08:00:00+01:00",
+           disruption_type: cancellation, cause_code: operational, notice_given_days: 2}
+    expected: {regime: eu261_amended_2027, in_scope: true, compensation_eur: 250, may_reduce_to_eur: null,
+               care: [], refund_option: true, voucher_requires: explicit_consent_durable_medium,
+               claim_deadline: "9 months from the actual date of departure", confidence: verified,
+               articles: ["8a(2)", "7(7)", "7(9)", "7(1)(a)"]}

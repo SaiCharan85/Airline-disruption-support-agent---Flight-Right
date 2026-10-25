@@ -1,0 +1,165 @@
+# Regulation (EC) No 261/2004 as interpreted by the CJEU. Plain-English notes: docs/regulation_notes.md.
+# Every number the engine uses lives here. Comparisons are explicit (gte / gt / lte / lt) because the
+# Regulation and the case law use different boundary wording in different articles.
+ruleset: eu261_2004
+version: "2004.1"
+checked: "2026-10-22"                            # sources re-read on this date
+applies_to:
+  scheduled_departure_before: "2027-10-23"      # mirrors config/app_config.yaml regime.boundary_date
+sources:
+  - {doc: "Regulation (EC) No 261/2004, OJ L 46, 17.2.2004", url: "https://eur-lex.europa.eu/eli/reg/2004/261/oj"}
+  - {doc: "Commission Interpretative Guidelines, OJ C 214, 15.6.2016", url: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:52016XC0615(01)"}
+  - {doc: "CJEU case law (Sturgeon, Nelson, Germanwings, Folkerts, Bossen, McDonagh, Pešková, Krüsemann, Airhelp, LE v TAP, Moré)", url: "https://curia.europa.eu"}
+
+scope:
+  departure_from_eu: {article: "3(1)(a)"}
+  arrival_in_eu_on_eu_carrier:
+    article: "3(1)(b)"
+    carrier_basis: operating                     # Art. 3(5); not the marketing / code-share carrier
+    third_country_benefits_exception:            # benefits AND assistance received in the third country
+      requires_both: [compensation, assistance]  # Guidelines 2016 §2.1.4: cumulative
+      action: review                             # equivalence is fact-dependent
+  excluded_fares: [free_of_charge, non_public_reduced_fare, staff_fare]   # Art. 3(3); Guidelines
+  included_fares: [frequent_flyer]
+  check_in_required_for: [delay, denied_boarding]                       # Art. 3(2)(a); not cancellation
+  aircraft: motorised_fixed_wing                                        # Art. 3(4)
+  territory:
+    eu_member_states: true                       # incl. outermost regions (Canaries, Azores, Madeira, FR overseas)
+    eea_and_switzerland: true                    # NO, IS, LI, CH apply the Regulation by agreement
+    united_kingdom: false                        # UK261 is out of scope
+
+distance:
+  method: great_circle
+  earth_radius_km: 6371.0
+  compensation_basis: origin_to_final_destination   # Art. 7(1) "last destination"; Bossen C-559/16
+  care_trigger_basis: delayed_flight_sector          # Art. 6(1) thresholds refer to the delayed flight
+  boundary_tolerance_km: 10                          # within this of a band edge -> confidence unverified
+
+compensation:
+  bands:                                         # Art. 7(1)
+    - {id: a, eur: 250, max_km: 1500, max_comparison: lte, article: "7(1)(a)"}
+    - {id: b, eur: 400, intra_eu_min_km: 1500, intra_eu_min_comparison: gt, other_max_km: 3500, other_max_comparison: lte, article: "7(1)(b)"}
+    - {id: c, eur: 600, article: "7(1)(c)"}
+  delay:
+    trigger_minutes: 180
+    comparison: gte                              # Sturgeon / Nelson: "three hours or more"
+    measured_at: final_destination               # Folkerts C-11/11
+    arrival_event: door_open                     # Germanwings C-452/13
+    articles: ["7(1)", "C-402/07 Sturgeon", "C-581/10 Nelson"]
+  reduction_on_rerouting:                        # Art. 7(2): the carrier MAY reduce by 50 %
+    # factor = share of the compensation still paid
+    optional_for_carrier: true
+    factor: 0.5
+    comparison: lte                              # "does not exceed"
+    arrival_delay_max_minutes: {a: 120, b: 180, c: 240}
+    applies_to: [cancellation, denied_boarding]
+    delay_long_haul: {band: c, arrival_delay_max_minutes: 240}   # Sturgeon: 3-4 h long-haul delay -> may pay 300
+  payment_methods: [cash, bank_transfer, cheque]  # Art. 7(3); vouchers only with signed agreement
+  # Distances within distance.boundary_tolerance_km of 3500 km touch this rule ("between 1500 and 3500").
+  boundary_3500_km: {assumed_band: b}
+
+cancellation:
+  definition_article: "2(l)"
+  brought_forward_minutes_counts_as_cancellation: 60   # departure brought forward by > 1 h (Azurair C-146/20)
+  notice_rules:                                  # Art. 5(1)(c): compensation NOT due if any rule matches
+    - {id: two_weeks, article: "5(1)(c)(i)", notice_days_min: 14}
+    - {id: seven_to_fourteen, article: "5(1)(c)(ii)", notice_days_min: 7, notice_days_max_exclusive: 14,
+       reroute_departure_early_max_minutes: 120, departure_comparison: lte,
+       reroute_arrival_late_max_minutes: 240, arrival_comparison: lt}
+    - {id: under_seven, article: "5(1)(c)(iii)", notice_days_max_exclusive: 7,
+       reroute_departure_early_max_minutes: 60, departure_comparison: lte,
+       reroute_arrival_late_max_minutes: 120, arrival_comparison: lt}
+  notice_unknown: compensation_due               # Art. 5(4): burden of proof on the carrier
+  # Notice of exactly 7 days touches this rule ("between two weeks and seven days" vs "less than seven days").
+  notice_exactly_7_days: {assumed_rule: seven_to_fourteen}
+  articles: ["5(1)(c)", "5(4)"]
+
+denied_boarding:
+  volunteers: {art8_assistance: true, art7_compensation: false, art9_care: false}   # Art. 4(1)
+  involuntary: {art7_compensation: true, art8_assistance: true, art9_care: true, timing: immediate}  # Art. 4(3)
+  not_denied_boarding_reasons: [health, safety, security, inadequate_travel_documentation]       # Art. 2(j)
+  extraordinary_circumstances_defence: false
+
+missed_connection:
+  single_booking: treat_as_delay_at_final_destination   # Folkerts C-11/11; Art. 2(h)
+  separate_tickets: assess_disrupted_flight_only
+
+extraordinary_circumstances:
+  article: "5(3)"
+  removes: [compensation]
+  never_removes: [care, refund_or_rerouting]     # McDonagh C-12/11
+  # cause_code -> classification. "review" = carrier defence that needs facts the engine cannot judge.
+  cause_codes:
+    weather_unsafe: {class: extraordinary, source: "Recital 14; Guidelines §5.3"}
+    atc_restriction: {class: extraordinary, source: "Recital 15"}
+    airport_closure: {class: extraordinary, source: "Recital 14"}
+    security_risk: {class: extraordinary, source: "Recital 14"}
+    political_instability: {class: extraordinary, source: "Recital 14"}
+    bird_strike: {class: extraordinary, source: "C-315/15 Pešková"}
+    unruly_passenger_diversion: {class: extraordinary, source: "C-74/19 LE v TAP"}
+    medical_emergency_onboard: {class: extraordinary, source: "Guidelines §5.3"}
+    hidden_manufacturing_defect: {class: extraordinary, source: "C-549/07 Wallentin-Hermann"}
+    third_party_strike: {class: extraordinary, source: "Recital 14 (e.g. ATC, airport staff)"}
+    technical_fault: {class: ordinary, source: "C-549/07 Wallentin-Hermann; C-257/14 van der Lans"}
+    own_staff_strike: {class: ordinary, source: "C-28/20 Airhelp v SAS"}
+    wildcat_strike: {class: ordinary, source: "C-195/17 Krüsemann"}
+    crew_shortage: {class: ordinary, source: "inherent in normal activity"}
+    overbooking: {class: ordinary, source: "Art. 4"}
+    operational: {class: ordinary, source: "inherent in normal activity"}
+    earlier_rotation_extraordinary: {class: review, source: "C-74/19 LE v TAP: direct causal link + reasonable measures"}
+    unknown: {class: review, source: "carrier must prove the defence"}
+
+care:
+  article: "9"
+  items:
+    meals_refreshments: {article: "9(1)(a)", rule: "in reasonable relation to waiting time", cap_eur: null}
+    communications: {article: "9(2)", count: 2}
+    hotel: {article: "9(1)(b)", when: overnight_stay_needed, cap_nights: null, cap_eur: null}
+    hotel_transport: {article: "9(1)(c)", when: overnight_stay_needed}
+  delay_triggers_minutes:                        # Art. 6(1), from scheduled departure, delayed-flight distance
+    comparison: gte
+    a: 120
+    b: 180
+    c: 240
+  delay_refund_option_minutes: 300               # Art. 6(1)(iii) -> Art. 8(1)(a)
+  # Art. 5(1)(b): care relates to waiting time, so it is owed when the passenger learns of the cancellation
+  # on the day of travel (notice 0 days) or the notice date is unknown; earlier notice means no airport wait.
+  cancellation: {article: "5(1)(b)", when_notice_days_max: 0}
+  denied_boarding: {article: "4(3)"}
+  special_needs_any_delay: true                  # Art. 11(2): "as soon as possible", no thresholds
+
+refund_or_rerouting:
+  article: "8(1)"
+  refund_within_days: 7
+  options: [refund, reroute_earliest, reroute_later_date]
+  return_flight_if_no_purpose: true
+  alternative_airport_transfer_paid: true        # Art. 8(3)
+
+vouchers:
+  requires: signed_agreement                     # Art. 7(3)
+  cash_right_must_be_stated: true
+
+claim_deadline:
+  in_regulation: null                            # none; national limitation periods apply (Moré C-139/11)
+  national_limitation_years:                     # examples only, not confirmed from primary sources
+    DE: 3
+    FR: 5
+    ES: 5
+    NL: 2
+    BE: 1
+
+special_needs:
+  categories: [reduced_mobility, accompanying_person, service_dog, unaccompanied_child]   # Art. 11(1)
+  priority: true
+
+# Rule keys (dotted paths in this file) not yet confirmed from primary text. Any rule listed here that an
+# evaluation touches sets Entitlement.confidence = "unverified" and the agent hands off (FR-4.7).
+unverified:
+  - scope.territory.eea_and_switzerland            # EEA Joint Committee / EU-CH agreement text not consulted
+  - compensation.boundary_3500_km                   # band b or c at exactly 3500 km not settled in the wording
+  - compensation.reduction_on_rerouting.delay_long_haul   # Sturgeon para. 63 from secondary summary only
+  - cancellation.brought_forward_minutes_counts_as_cancellation   # Azurair C-146/20 not read in primary text
+  - cancellation.notice_exactly_7_days              # tier boundary wording ambiguous
+  - claim_deadline.national_limitation_years
+  - extraordinary_circumstances.cause_codes.medical_emergency_onboard
+  - extraordinary_circumstances.cause_codes.third_party_strike

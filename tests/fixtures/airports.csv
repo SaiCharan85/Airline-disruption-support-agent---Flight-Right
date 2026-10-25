@@ -1,0 +1,27 @@
+ident,type,name,latitude_deg,longitude_deg,iso_country,iata_code
+EHAM,large_airport,Amsterdam Airport Schiphol,52.308601,4.76389,NL,AMS
+LGAV,large_airport,Athens Eleftherios Venizelos International Airport,37.936401,23.9445,GR,ATH
+LEBL,large_airport,Josep Tarradellas Barcelona-El Prat Airport,41.2971,2.07846,ES,BCN
+EBBR,large_airport,Brussels Airport,50.901402,4.48444,BE,BRU
+LFPG,large_airport,Charles de Gaulle International Airport,49.00896,2.554117,FR,CDG
+EIDW,large_airport,Dublin Airport,53.428713,-6.262121,IE,DUB
+OMDB,large_airport,Dubai International Airport,25.24979,55.370992,AE,DXB
+LIRF,large_airport,Rome–Fiumicino Leonardo da Vinci International Airport,41.804532,12.251998,IT,FCO
+EDDF,large_airport,Frankfurt Main Airport,50.026706,8.55835,DE,FRA
+EDDH,large_airport,Hamburg Helmut Schmidt Airport,53.630402,9.98823,DE,HAM
+EFHK,large_airport,Helsinki Vantaa Airport,60.318363,24.963341,FI,HEL
+LTFM,large_airport,İstanbul Airport,41.274874,28.732136,TR,IST
+KJFK,large_airport,John F. Kennedy International Airport,40.639447,-73.779317,US,JFK
+BIKF,large_airport,Keflavik International Airport,63.985001,-22.6056,IS,KEF
+LCLK,large_airport,Larnaca International Airport,34.875099,33.624901,CY,LCA
+EGLL,large_airport,London Heathrow Airport,51.470748,-0.459909,GB,LHR
+LPPT,large_airport,Lisbon Humberto Delgado Airport,38.7813,-9.13592,PT,LIS
+GCLP,large_airport,Gran Canaria Airport,27.9319,-15.3866,ES,LPA
+LEMD,large_airport,Adolfo Suárez Madrid–Barajas Airport,40.493407,-3.572249,ES,MAD
+EDDM,large_airport,Munich Airport,48.353802,11.7861,DE,MUC
+ENGM,large_airport,Oslo-Gardermoen International Airport,60.193901,11.1004,NO,OSL
+LPPD,large_airport,João Paulo II Airport,37.7411994934,-25.6979007721,PT,PDL
+FMEE,large_airport,Roland Garros Airport,-20.890087,55.518894,RE,RUN
+LOWW,large_airport,Vienna International Airport,48.110298,16.5697,AT,VIE
+EPWA,large_airport,Warsaw Chopin Airport,52.165699,20.9671,PL,WAW
+LSZH,large_airport,Zürich Airport,47.458056,8.548056,CH,ZRH

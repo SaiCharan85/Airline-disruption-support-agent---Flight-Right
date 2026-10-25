@@ -1,0 +1,10 @@
+# ISO 3166-1 alpha-2 codes as used by OurAirports `iso_country`. Checked: 2026-10-25.
+# Codes are quoted on purpose: unquoted NO (Norway) is read by YAML as boolean false.
+# EU member states (27), including outermost regions that OurAirports files under the member state
+# (Canaries ES, Azores/Madeira PT).
+eu_member_states: ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU", "IE",
+                   "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
+# French outermost regions have their own ISO codes in OurAirports but are EU territory.
+eu_outermost_regions: ["GF", "GP", "MQ", "MF", "RE", "YT"]
+# Apply EU261 by agreement (EEA Agreement / EU-Switzerland air transport agreement); see ruleset unverified list.
+eea_and_switzerland: ["CH", "IS", "LI", "NO"]
