@@ -105,6 +105,17 @@ class RuleStep(BaseModel):
     article: str | None = None
 
 
+class ToolCallRecord(BaseModel):
+    """One agent tool call, kept with each draft attempt (SPEC §5 DraftAttempt.tool_calls)."""
+
+    tool: str
+    args: dict[str, object]
+    result: dict[str, object] | list[dict[str, object]] | None = None
+    error: str | None = None
+    idempotency_key: str | None = None
+    at: datetime
+
+
 class Entitlement(BaseModel):
     regime: Regime
     ruleset_version: str

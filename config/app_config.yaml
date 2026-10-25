@@ -4,7 +4,7 @@ harness:
   seed: 42
 
 regime:
-  boundary_date: "2027-10-23"     # FR-4.2: eu261_2004 before, eu261_amended_2027 from this date (verify in Step 1)
+  boundary_date: "2027-10-23"     # FR-4.2: eu261_2004 before, eu261_amended_2027 from this date
 
 # LLMs: all free (Groq + Google AI Studio free tiers; local Ollama last). Free quotas may be shared with
 # other projects on the same provider account: the usage ledger hard-stops at safety_margin x limit, then
@@ -17,7 +17,7 @@ models:
   checked: "2026-10-25"
   limits_checked: "2026-10-06"
   safety_margin: 0.9
-  day_reset_utc_offset_hours: -8
+  day_reset_utc_offset_hours: -8      # daily quotas reset at Pacific midnight
   timeout_s: 90
   cache_path: .cache/llm/cache.sqlite3
   usage_path: .cache/llm/usage.sqlite3
@@ -26,18 +26,33 @@ models:
     google: {base_url: "https://generativelanguage.googleapis.com/v1beta/openai", api_key_env: GOOGLE_API_KEY}
     ollama: {base_url: "http://localhost:11434/v1", api_key_env: null}
   catalog:   # "<provider>:<model id>" -> family (judges must differ from the agent) + free limits
-    "groq:openai/gpt-oss-120b": {family: gpt-oss, rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000}
-    "groq:openai/gpt-oss-20b": {family: gpt-oss, rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000}
+    "groq:openai/gpt-oss-120b": {family: gpt-oss, efforts: [low, medium, high], rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000}
+    "groq:openai/gpt-oss-20b": {family: gpt-oss, efforts: [low, medium, high], rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000}
+    # Groq refuses requests whose max_tokens exceeds the output-tokens-per-minute limit
     "groq:qwen/qwen3.8-27b": {family: qwen, rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000, otpm: 1000}
-    "google:gemini-3.8-flash": {family: gemini, rpm: 10, rpd: 250, tpm: 250000}
-    "google:gemini-3.5-flash-lite": {family: gemini, rpm: 15, rpd: 1000, tpm: 250000}
+    "google:gemini-3.8-flash": {family: gemini, efforts: [minimal, low, medium, high], rpm: 10, rpd: 250, tpm: 250000}
+    "google:gemini-3.5-flash-lite": {family: gemini, efforts: [minimal, low, medium, high], rpm: 15, rpd: 1000, tpm: 250000}
+    # Gemma 4 always thinks first (<thought> block); thinking_tokens is added on top of each role's cap
     "google:gemma-4-26b-a4b-it": {family: gemma, rpm: 15, rpd: 7200, tpm: 15000, thinking_tokens: 2048}
     "ollama:autoclaim-judge": {family: qwen}
   # Draft role chains (tuned in Steps 5-8). judge_a / judge_b never share the agent's family (FR-8.8).
   roles:
-    triage: {chain: ["google:gemini-3.5-flash-lite", "groq:openai/gpt-oss-20b"]}
-    agent: {chain: ["groq:openai/gpt-oss-120b", "groq:openai/gpt-oss-20b"]}
-    judge_a: {chain: ["google:gemma-4-26b-a4b-it", "google:gemini-3.8-flash", "ollama:autoclaim-judge"]}
-    judge_b: {chain: ["groq:qwen/qwen3.8-27b", "google:gemini-3.5-flash-lite"]}
-    summary: {chain: ["google:gemini-3.5-flash-lite", "groq:openai/gpt-oss-20b"]}
-    simulator: {chain: ["google:gemini-3.5-flash-lite", "google:gemma-4-26b-a4b-it"]}
+    triage: {chain: ["google:gemini-3.5-flash-lite", "groq:openai/gpt-oss-20b"], max_tokens: 600, reasoning_effort: low}
+    agent: {chain: ["groq:openai/gpt-oss-120b", "groq:openai/gpt-oss-20b"], max_tokens: 1200, reasoning_effort: low}
+    judge_a: {chain: ["google:gemma-4-26b-a4b-it", "google:gemini-3.8-flash", "ollama:autoclaim-judge"], max_tokens: 1200, reasoning_effort: low}
+    judge_b: {chain: ["groq:qwen/qwen3.8-27b", "google:gemini-3.5-flash-lite"], max_tokens: 1000, reasoning_effort: low}
+    summary: {chain: ["google:gemini-3.5-flash-lite", "groq:openai/gpt-oss-20b"], max_tokens: 800, reasoning_effort: low}
+    simulator: {chain: ["google:gemini-3.5-flash-lite", "google:gemma-4-26b-a4b-it"], max_tokens: 800, reasoning_effort: minimal}
+
+# What the agent may do without a human (FR-5.3). These are company authority limits, not legal caps:
+# EU261 sets no euro cap on care. Anything above a limit becomes a handoff.
+authority:
+  care_voucher_max_eur: {refreshments: 15, meal: 30, hotel_night: 180, hotel_transport: 60, communications: 10}
+  care_vouchers_max_total_eur: 600         # per conversation
+  refund_auto_max_eur: 800                 # larger refunds need a human
+  compensation_auto_initiate: false        # the agent states compensation; payment is a human/back-office step
+
+# Local stores (git-ignored). ":memory:" is used in tests.
+stores:
+  history_path: .cache/stores/history.sqlite3
+  actions_path: .cache/stores/actions.sqlite3
