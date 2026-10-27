@@ -116,6 +116,27 @@ class Situation(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+TIER_ORDER: dict[str, int] = {"S1": 1, "S2": 2, "S3": 3, "S4": 4}
+URGENCY_ORDER: dict[str, int] = {"none": 0, "soon": 1, "immediate": 2}
+
+
+class TriageResult(BaseModel):
+    """Severity of one passenger message (FR-3.1, SPEC §5)."""
+
+    tier: Tier
+    urgency: Urgency
+    urgency_deadline: datetime | None = None
+    urgency_deadline_minutes: int | None = None
+    frustration: int = Field(ge=1, le=5)
+    vulnerability_flags: list[VulnerabilityFlag] = Field(default_factory=list)
+    repeat_contact_count: int = 0
+    reasons: list[str] = Field(default_factory=list)
+    source: Literal["rules", "llm", "merged"]
+    rules_tier: Tier | None = None
+    llm_tier: Tier | None = None
+    llm_confidence: float | None = None
+
+
 class PlantedError(BaseModel):
     """A known defect planted into a good reply (judge evaluation, Step 7b)."""
 

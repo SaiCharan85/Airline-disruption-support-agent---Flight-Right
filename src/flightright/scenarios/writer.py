@@ -47,6 +47,9 @@ INSTRUCTIONS = (
     "- Use only the facts given. Passengers may leave details out, as real people do, but"
     " never change a fact\n"
     "  (delay length, cause, dates, route) and never invent new events.\n"
+    "- Never add stakes the facts do not list: no onward connections, trains, events, deadlines,\n"
+    "  medical issues, children, overnight stays or extra earlier contacts unless they are given.\n"
+    '  "earlier contacts: 1" means exactly one earlier message, not "the third time".\n'
     "- Do not quote compensation amounts or regulation articles, unless honesty is "
     '"exaggerating": then the\n'
     "  passenger may overstate the delay or demand an inflated amount.\n"
