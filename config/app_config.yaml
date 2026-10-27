@@ -34,14 +34,13 @@ models:
     "google:gemini-3.5-flash-lite": {family: gemini, efforts: [minimal, low, medium, high], rpm: 15, rpd: 1000, tpm: 250000}
     # Gemma 4 always thinks first (<thought> block); thinking_tokens is added on top of each role's cap
     "google:gemma-4-26b-a4b-it": {family: gemma, rpm: 15, rpd: 7200, tpm: 15000, thinking_tokens: 2048}
-    "ollama:autoclaim-judge": {family: qwen}
   # Draft role chains (tuned in Steps 5-8). judge_a / judge_b never share the agent's family (FR-8.8).
   roles:
     # gpt-oss first, Gemma as fallback: the scenario messages were written by gemini-3.5-flash-lite,
     # so that model is kept out of triage evaluation to avoid self-preference.
     triage: {chain: ["groq:openai/gpt-oss-20b", "google:gemma-4-26b-a4b-it"], max_tokens: 600, reasoning_effort: low}
     agent: {chain: ["groq:openai/gpt-oss-120b", "groq:openai/gpt-oss-20b"], max_tokens: 1200, reasoning_effort: low}
-    judge_a: {chain: ["google:gemma-4-26b-a4b-it", "google:gemini-3.8-flash", "ollama:autoclaim-judge"], max_tokens: 1200, reasoning_effort: low}
+    judge_a: {chain: ["google:gemma-4-26b-a4b-it", "google:gemini-3.8-flash"], max_tokens: 1200, reasoning_effort: low}
     judge_b: {chain: ["groq:qwen/qwen3.8-27b", "google:gemini-3.5-flash-lite"], max_tokens: 1000, reasoning_effort: low}
     summary: {chain: ["google:gemini-3.5-flash-lite", "groq:openai/gpt-oss-20b"], max_tokens: 800, reasoning_effort: low}
     simulator: {chain: ["google:gemini-3.5-flash-lite", "google:gemma-4-26b-a4b-it"], max_tokens: 800, reasoning_effort: minimal}
@@ -52,9 +51,21 @@ models:
 # EU261 sets no euro cap on care. Anything above a limit becomes a handoff.
 authority:
   care_voucher_max_eur: {refreshments: 15, meal: 30, hotel_night: 180, hotel_transport: 60, communications: 10}
+  # Value of the care vouchers the agent issues automatically while a passenger waits.
+  care_voucher_standard_eur: {refreshments: 10, meal: 20, hotel_night: 150, hotel_transport: 40}
   care_vouchers_max_total_eur: 600         # per conversation
   refund_auto_max_eur: 800                 # larger refunds need a human
   compensation_auto_initiate: false        # the agent states compensation; payment is a human/back-office step
+
+# Conversation graph (FR-1, FR-2, FR-9).
+agent:
+  max_revisions: 2                 # revise up to 2 times, then hand off (FR-9.1)
+  abuse_handoff_threshold: 2       # abusive messages before a human is offered (FR-2.2)
+  reply_max_words: 220
+  checkpoint_path: .cache/stores/checkpoints.sqlite3
+
+# Minutes until a human must acknowledge a handoff, per tier (W2 escalates after this).
+sla_minutes: {S1: 240, S2: 60, S3: 15, S4: 10}
 
 # Local stores (git-ignored). ":memory:" is used in tests.
 stores:

@@ -201,6 +201,59 @@ class Entitlement(BaseModel):
         return {c.item for c in self.care}
 
 
+class CheckResult(BaseModel):
+    """One deterministic code check on a draft (FR-7)."""
+
+    check_id: str
+    passed: bool
+    detail: str = ""
+
+
+class DraftAttempt(BaseModel):
+    attempt_id: str
+    conversation_id: str
+    attempt_no: int
+    draft_text: str
+    tool_calls: list[ToolCallRecord] = Field(default_factory=list)
+    code_checks: list[CheckResult] = Field(default_factory=list)
+    model: str = ""
+    created_at: datetime
+
+
+class Resolution(BaseModel):
+    decision: str
+    notes: str = ""
+    compensation_paid_eur: int | None = None
+    resolved_at: datetime
+
+
+class HandoffTicket(BaseModel):
+    ticket_id: str
+    conversation_id: str
+    tier: Tier
+    urgency: Urgency
+    summary: str
+    entitlement: Entitlement | None
+    actions_tried: list[str] = Field(default_factory=list)
+    passenger_state: str
+    recommended_next_step: str
+    reason: str
+    status: Literal["open", "acknowledged", "resolved", "escalated"] = "open"
+    sla_due_at: datetime
+    resolution: Resolution | None = None
+
+
+class Booking(BaseModel):
+    """What the airline's booking system knows about a passenger's trip (mock)."""
+
+    booking_ref: str
+    passenger_ref: str
+    passenger_name: str
+    loyalty_tier: Literal["none", "silver", "gold"] = "none"
+    fare_eur: int = 200
+    case: DisruptionCase
+
+
 class Scenario(BaseModel):
     """A synthetic evaluation case with ground truth (SPEC §5, §10.1)."""
 

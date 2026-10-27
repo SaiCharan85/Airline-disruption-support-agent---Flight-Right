@@ -14,6 +14,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from flightright.config import AuthorityConfig
+from flightright.models import Booking
 from flightright.services.actions import ActionStore
 from flightright.services.types import (
     AuthorityExceededError,
@@ -63,6 +64,15 @@ class MockAirline:
         self.clock = clock
         self._flights: dict[tuple[str, str], FlightStatus] = {}
         self._rebooking: dict[tuple[str, str], list[RebookingOption]] = {}
+        self._bookings: dict[str, Booking] = {}
+
+    # ------------------------------------------------------------------ bookings
+
+    def register_booking(self, booking: Booking) -> None:
+        self._bookings[booking.booking_ref.upper()] = booking
+
+    def get_booking(self, booking_ref: str) -> Booking | None:
+        return self._bookings.get(booking_ref.upper())
 
     # ------------------------------------------------------------------ flights
 

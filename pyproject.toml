@@ -9,6 +9,8 @@ requires-python = ">=3.11"
 # so CI stays fast and every dependency has a reason to exist.
 dependencies = [
     "httpx>=0.28.1",
+    "langgraph>=1.2.18",
+    "langgraph-checkpoint-sqlite>=3.1.2",
     "pydantic>=2.14.1",
     "pyyaml>=6.0.3",
 ]
@@ -45,6 +47,9 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "PTH"]
 [tool.ruff.lint.per-file-ignores]
 # Test names reference requirement IDs, e.g. test_FR_4_7_...
 "tests/**" = ["N802"]
+# Prompt and message templates: prose stays readable rather than split at 100 columns.
+"src/flightright/agent/drafting.py" = ["E501"]
+"src/flightright/agent/handoff.py" = ["E501"]
 
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]

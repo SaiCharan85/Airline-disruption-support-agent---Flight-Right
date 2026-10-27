@@ -45,6 +45,7 @@ class ModelsConfig(BaseModel):
 
 class AuthorityConfig(BaseModel):
     care_voucher_max_eur: dict[str, int]
+    care_voucher_standard_eur: dict[str, int] = Field(default_factory=dict)
     care_vouchers_max_total_eur: int
     refund_auto_max_eur: int
     compensation_auto_initiate: bool = False
@@ -55,11 +56,22 @@ class StoresConfig(BaseModel):
     actions_path: str
 
 
+class AgentConfig(BaseModel):
+    max_revisions: int = 2
+    abuse_handoff_threshold: int = 2
+    reply_max_words: int = 220
+    checkpoint_path: str = ".cache/stores/checkpoints.sqlite3"
+
+
 class AppConfig(BaseModel):
     seed: int
     models: ModelsConfig
     authority: AuthorityConfig
     stores: StoresConfig
+    agent: AgentConfig = Field(default_factory=AgentConfig)
+    sla_minutes: dict[str, int] = Field(
+        default_factory=lambda: {"S1": 240, "S2": 60, "S3": 15, "S4": 10}
+    )
 
 
 def load_env(path: Path | None = None) -> None:
@@ -83,4 +95,6 @@ def load_config(path: Path | None = None) -> AppConfig:
         models=ModelsConfig.model_validate(raw["models"]),
         authority=AuthorityConfig.model_validate(raw["authority"]),
         stores=StoresConfig.model_validate(raw["stores"]),
+        agent=AgentConfig.model_validate(raw.get("agent", {})),
+        sla_minutes=raw.get("sla_minutes", {"S1": 240, "S2": 60, "S3": 15, "S4": 10}),
     )
