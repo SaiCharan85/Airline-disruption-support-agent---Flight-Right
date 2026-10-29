@@ -1,0 +1,367 @@
+{
+  "id": "FRw1Inbound00001",
+  "name": "W1 Inbound message",
+  "active": true,
+  "nodes": [
+    {
+      "id": "b3ec0304-5dda-5531-898a-6217a7132ccf",
+      "name": "Inbound webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "4f79b973-d186-5b0e-bb42-bd0c9c7a7800"
+    },
+    {
+      "id": "774407b8-ad28-5f70-a69c-6d6c55b20648",
+      "name": "Map user to conversation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Mapping only: channel user -> conversation_id (kept in this workflow's static data).\nconst store = $getWorkflowStaticData('global');\nstore.users = store.users || {};\nreturn $input.all().map(item => {\n  const b = item.json.body || {};\n  const missing = ['user_id', 'text', 'message_id'].filter(k => !b[k]);\n  return { json: {\n    user_id: String(b.user_id || ''),\n    text: String(b.text || ''),\n    message_id: String(b.message_id || ''),\n    channel: String(b.channel || 'webhook'),\n    booking_ref: b.booking_ref || null,\n    conversation_id: store.users[String(b.user_id)] || '',\n    invalid: missing.length ? `missing field(s): ${missing.join(', ')}` : '',\n  } };\n});\n"
+      }
+    },
+    {
+      "id": "c97b8aa2-f6c9-5198-b2fc-39c795b90c87",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d00f202f-c222-5a01-89b5-0dcdc2ca1c80",
+              "leftValue": "={{ $json.invalid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "638734a4-d3c1-51b0-91c5-8f1cdfca085d",
+      "name": "Reject",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        480
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: $json.invalid }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "f7315df2-8fff-59b6-bf4a-d1dd52bde11e",
+      "name": "Known user?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1968e09-9e0e-5bbb-99e7-714e555b679b",
+              "leftValue": "={{ $json.conversation_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "860da6a9-3a3a-5422-93ed-561d67a9d1dd",
+      "name": "Create conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        360
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/conversations",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, booking_ref: $json.booking_ref }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "90f026dc-455a-5fd7-9525-f1020537038e",
+      "name": "Remember conversation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        360
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const store = $getWorkflowStaticData('global');\nstore.users = store.users || {};\nconst msg = $('Map user to conversation').first().json;\nconst cid = $input.first().json.conversation_id;\nstore.users[msg.user_id] = cid;\nreturn [{ json: { ...msg, conversation_id: cid } }];\n"
+      }
+    },
+    {
+      "id": "5536d1c1-46a6-5bba-9eaa-445ea0bc7dcd",
+      "name": "Send to agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/conversations/{{ $json.conversation_id }}/messages",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.text, idempotency_key: $json.message_id }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "53005b7a-0f6f-5902-b38d-7bd8b08e7299",
+      "name": "Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply_text: $json.reply_text, status: $json.status, ticket_id: $json.ticket_id, duplicate: $json.duplicate, conversation_id: ($('Remember conversation').isExecuted ? $('Remember conversation').first().json.conversation_id : $('Map user to conversation').first().json.conversation_id) }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "78d3ef92-0a30-5936-89c2-c5e9183cec53",
+      "name": "Log delivery failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        320
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'alert', ticket_id: null, channel: 'log', text: 'W1: the agent API did not answer after 3 tries; holding message sent to ' + $('Map user to conversation').first().json.user_id }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fd9b4928-3c5a-57d3-b0be-777c036284df",
+      "name": "Holding message",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1760,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply_text: 'Thanks for your message. We are having a technical problem right now; a colleague will get back to you shortly.', status: 'holding', ticket_id: null }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Inbound webhook": {
+      "main": [
+        [
+          {
+            "node": "Map user to conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map user to conversation": {
+      "main": [
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "node": "Known user?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Known user?": {
+      "main": [
+        [
+          {
+            "node": "Send to agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create conversation": {
+      "main": [
+        [
+          {
+            "node": "Remember conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remember conversation": {
+      "main": [
+        [
+          {
+            "node": "Send to agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to agent": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log delivery failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log delivery failure": {
+      "main": [
+        [
+          {
+            "node": "Holding message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": []
+}

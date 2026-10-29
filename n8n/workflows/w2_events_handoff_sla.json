@@ -1,0 +1,517 @@
+{
+  "id": "FRw2Events000001",
+  "name": "W2 Signed events: handoffs, SLA and alerts",
+  "active": true,
+  "nodes": [
+    {
+      "id": "5bded257-08df-52ce-b548-6a1a9676cc1e",
+      "name": "API events webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flightright-events",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "webhookId": "a0a40e03-f584-5f0e-8a03-d8e677d67191"
+    },
+    {
+      "id": "5233116e-051e-59c5-9e98-1530a676690e",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Signature verification only (SPEC 7.4): HMAC-SHA256 over timestamp + raw body, 5-minute window,\n// event_id de-duplication. No business logic here.\nconst crypto = require('crypto');\nconst secret = $env.N8N_HMAC_SECRET || '';\nconst store = $getWorkflowStaticData('global');\nstore.seen = store.seen || [];\nconst out = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const h = item.json.headers || {};\n  const ts = String(h['x-timestamp'] || '');\n  const sig = String(h['x-signature'] || '');\n  let raw;\n  try { raw = await this.helpers.getBinaryDataBuffer(i, 'data'); }\n  catch (e) { raw = Buffer.from((item.binary && item.binary.data && item.binary.data.data) || '', 'base64'); }\n  const expected = 'sha256=' + crypto.createHmac('sha256', secret)\n    .update(Buffer.concat([Buffer.from(ts), raw])).digest('hex');\n  const age = Math.abs(Date.now() / 1000 - Number(ts));\n  let reason = '';\n  if (!secret) reason = 'N8N_HMAC_SECRET is not set';\n  else if (!ts || !Number.isFinite(age) || age > 300) reason = 'timestamp missing or outside the 5-minute window';\n  else if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) reason = 'bad signature';\n  let envelope = {};\n  if (!reason) {\n    try { envelope = JSON.parse(raw.toString('utf8')); } catch (e) { reason = 'body is not JSON'; }\n  }\n  if (!reason && store.seen.includes(envelope.event_id)) reason = 'duplicate event_id';\n  if (!reason) { store.seen.push(envelope.event_id); store.seen = store.seen.slice(-500); }\n  out.push({ json: {\n    valid: !reason, reason,\n    event_id: envelope.event_id || h['x-event-id'] || null,\n    event: envelope.event || null,\n    payload: envelope.payload || {},\n  } });\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "aebfb9a5-75f0-58e3-9983-57e61524fbc1",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "512eb88e-dc23-58fa-8c54-d0665c0be382",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "434b8902-bf65-550a-8782-82995bce0476",
+      "name": "Log rejected event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'signature.rejected', ticket_id: null, channel: 'log', text: 'Dropped API event ' + ($json.event_id || '?') + ': ' + $json.reason }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "707340d2-2bdf-5f76-9ee4-78e59a41a5f6",
+      "name": "Handoff?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "20cda2cf-f6d8-501d-9b10-c382e2cecebe",
+              "leftValue": "={{ $json.event }}",
+              "rightValue": "handoff.created",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "bd1d81cb-aae0-5ef8-b6e3-9ea7344a3d46",
+      "name": "Format ticket notice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Formatting only. SLA_SECONDS_OVERRIDE shortens the wait in the test stack.\nconst console = ($env.FLIGHTRIGHT_CONSOLE_URL || 'http://localhost:5173').replace(/\\/$/, '');\nconst override = Number($env.SLA_SECONDS_OVERRIDE || 0);\nreturn $input.all().map(item => {\n  const p = item.json.payload;\n  const minutes = Number(p.sla_minutes || 60);\n  return { json: {\n    ticket_id: p.ticket_id,\n    tier: p.tier,\n    wait_seconds: override > 0 ? override : minutes * 60,\n    text: `New ${p.tier} handoff ${p.ticket_id} (${p.urgency || 'soon'}, reply due within ${minutes} min). `\n      + `Reason: ${p.reason}. ${p.summary || ''} Open: ${console}/handoffs/${p.ticket_id}`,\n  } };\n});\n"
+      }
+    },
+    {
+      "id": "f5cfcea2-87bc-596a-a9a8-0c592165d688",
+      "name": "Notify handoff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'handoff.created', ticket_id: $json.ticket_id, channel: 'log', text: $json.text }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "e2934279-6f54-5037-bb82-f375f916962b",
+      "name": "Wait for SLA",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        100
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $('Format ticket notice').item.json.wait_seconds }}",
+        "unit": "seconds"
+      },
+      "webhookId": "95c61aff-cba1-57a8-a02e-55a81dc2b727"
+    },
+    {
+      "id": "386d340d-825d-59af-a818-8b1cfb2c3542",
+      "name": "Get ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/handoffs/{{ $('Format ticket notice').item.json.ticket_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "2bfb6bae-9140-5523-b90e-32dfb6761f85",
+      "name": "Still open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f01637c1-ea13-5247-b9e5-517994833625",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "open",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "db8d69f0-637a-5a08-9fa6-4b527d2a7222",
+      "name": "Escalate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/handoffs/{{ $('Format ticket notice').item.json.ticket_id }}/escalate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "820a73d9-5e3d-5da8-8ebc-f11d09b39096",
+      "name": "Notify supervisor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'sla.escalated', ticket_id: $('Format ticket notice').item.json.ticket_id, channel: 'log', text: 'SLA missed: ' + $('Format ticket notice').item.json.tier + ' ticket ' + $('Format ticket notice').item.json.ticket_id + ' was not acknowledged in time and is now escalated.' }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "8502a875-a8ce-5e84-8669-9f44b9582df4",
+      "name": "Dedupe alert (1 h)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// W4: route by type and drop repeats of the same alert within an hour (formatting only).\nconst store = $getWorkflowStaticData('global');\nstore.alerts = store.alerts || {};\nconst now = Date.now();\nconst out = [];\nfor (const item of $input.all()) {\n  const p = item.json.payload || {};\n  const key = item.json.event + ':' + (p.metric || p.conversation_id || '');\n  if (store.alerts[key] && now - store.alerts[key] < 3600 * 1000) continue;\n  store.alerts[key] = now;\n  const text = item.json.event === 'metrics.threshold_breached'\n    ? `Judge monitor: ${p.metric} is ${Number(p.value).toFixed(2)} (limit ${p.limit}) over the last hour.`\n    : `Prompt-injection attempt blocked in conversation ${p.conversation_id}.`;\n  out.push({ json: { kind: item.json.event, text } });\n}\nreturn out;\n"
+      }
+    },
+    {
+      "id": "16a329bd-84ae-537c-b096-9d7598afec5e",
+      "name": "Post alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'alert', ticket_id: null, channel: 'log', text: $json.text }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "API events webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "node": "Handoff?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log rejected event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handoff?": {
+      "main": [
+        [
+          {
+            "node": "Format ticket notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dedupe alert (1 h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format ticket notice": {
+      "main": [
+        [
+          {
+            "node": "Notify handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify handoff": {
+      "main": [
+        [
+          {
+            "node": "Wait for SLA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for SLA": {
+      "main": [
+        [
+          {
+            "node": "Get ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get ticket": {
+      "main": [
+        [
+          {
+            "node": "Still open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still open?": {
+      "main": [
+        [
+          {
+            "node": "Escalate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate": {
+      "main": [
+        [
+          {
+            "node": "Notify supervisor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedupe alert (1 h)": {
+      "main": [
+        [
+          {
+            "node": "Post alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": []
+}

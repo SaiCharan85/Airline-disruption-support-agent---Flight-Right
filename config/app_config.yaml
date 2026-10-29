@@ -64,6 +64,18 @@ agent:
   reply_max_words: 220
   checkpoint_path: .cache/stores/checkpoints.sqlite3
 
+# Judge Workbench (FR-16) and Judge Monitor alerts (FR-17.5).
+judge:
+  exemplars_enabled: true
+  exemplars_k: 3                      # reviewer corrections shown to the judge per call (dev / live only)
+  proposal_min_corrections: 3         # consistent corrections on a dimension before a bar change is proposed
+alerts:
+  min_judgements: 10                  # no alert on tiny samples
+  panel_disagreement_rate: 0.3        # share of S3 panels that disagree, rolling 1 h
+  judge_unavailable_rate: 0.1         # share of judgements without a trustworthy verdict, rolling 1 h
+  handoff_rate: 0.6
+  dedupe_minutes: 60
+
 # Minutes until a human must acknowledge a handoff, per tier (W2 escalates after this).
 sla_minutes: {S1: 240, S2: 60, S3: 15, S4: 10}
 

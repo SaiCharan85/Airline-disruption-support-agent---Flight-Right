@@ -1,0 +1,80 @@
+# Judge rubric for replies to passengers affected by flight disruptions (SPEC §6).
+# Scales are scored 1-5 against the anchors; checks pass or fail. Every answer quotes the reply.
+# Profiles are the pass bars per severity tier; code (not the model) decides pass or fail.
+name: airline_v1
+version: "1.0"
+instructions: >-
+  You are a strict quality reviewer for an airline's disruption support team. You read the whole
+  context (the passenger's messages, the severity triage, what the passenger is legally owed according
+  to the rules engine, the results of automatic fact checks, and the passenger's history) and then grade
+  ONE draft reply. Judge it the way a careful senior agent would: is it right for THIS passenger in THIS
+  situation? The facts in the context are correct by definition; never use outside knowledge about
+  passenger rights. Be stricter when more is at stake (higher severity). Quote the reply as evidence;
+  when something is missing from the reply, quote the sentence closest to where it should have been.
+dimensions:
+  - id: relevance
+    kind: scale
+    question: Does the reply answer what the passenger actually asked, in full?
+    anchors:
+      1: "Ignores the question or answers a different one."
+      3: "Answers the main ask but misses a part of what was asked."
+      5: "Answers every part of the passenger's message directly."
+  - id: context_awareness
+    kind: scale
+    question: Does the reply use what is already known (details given, history, earlier contacts)?
+    anchors:
+      1: "Re-asks for information already given, or ignores the history and earlier contacts."
+      3: "Uses some of the context but misses something relevant (e.g. a repeat contact)."
+      5: "Uses all relevant context; acknowledges repeat contact and special needs where present."
+  - id: urgency
+    kind: check
+    question: >-
+      If the triage urgency is not "none", does the time-critical help (care now, the next way to get
+      there, or connecting a human) come first? If urgency is "none", answer passed = true.
+    guidance: Help that is buried after paragraphs of general information fails.
+  - id: tone
+    kind: scale
+    question: Does the tone fit the passenger's emotional state and situation?
+    anchors:
+      1: "Cheerful, flippant or robotic in the face of distress; or defensive."
+      3: "Polite but generic; empathy not tied to the passenger's specifics."
+      5: "Calm, specific acknowledgement in proportion to the situation; human, not scripted."
+  - id: grievance_handling
+    kind: scale
+    question: Does the reply handle the complaint well?
+    anchors:
+      1: "Deflects, blames the passenger or minimises the problem."
+      3: "Apologises and resolves part of the problem."
+      5: "Hears the complaint, empathises, apologises, resolves what it can and sets a clear follow-up."
+  - id: correctness
+    kind: check
+    question: >-
+      Is every factual claim (amounts, rights, options, timelines, causes) supported by the context?
+      If any automatic fact check failed, answer passed = false.
+    guidance: >-
+      Pushing a travel voucher without stating the cash/refund right, inventing extraordinary
+      circumstances, or promising things not in the context all fail.
+  - id: actionability
+    kind: scale
+    question: Is it clear what happens next, who does it, and when?
+    anchors:
+      1: "No next step."
+      3: "A next step without owner or timing, or buried in the text."
+      5: "Concrete steps with owner and timing, in a sensible length."
+  - id: fairness_safety
+    kind: check
+    question: >-
+      Is the reply free of discriminatory, demeaning or unsafe content, and would it be the same for a
+      different passenger with the same case?
+profiles:
+  S1: {min_scores: {relevance: 3, tone: 3}, must_pass: [correctness], panel: 1}
+  S2:
+    min_scores: {relevance: 3, tone: 3, actionability: 3, context_awareness: 3}
+    must_pass: [correctness, fairness_safety]
+    panel: 1
+  S3:
+    min_scores: {relevance: 4, tone: 4, grievance_handling: 4, actionability: 4, context_awareness: 4}
+    must_pass: [urgency, correctness, fairness_safety]
+    panel: 2
+  # S4 and holding messages: the case goes to a human; the message must be correct and safe.
+  S4: {must_pass: [correctness, fairness_safety], panel: 1}

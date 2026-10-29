@@ -135,11 +135,21 @@ class LLMClient:
         schema: type[T],
         exclude_families: frozenset[str] = frozenset(),
         chain: Sequence[str] | None = None,
+        use_cache: bool = True,
     ) -> Result[T]:
-        """JSON answer validated against `schema`. `chain` overrides the role's fallback chain."""
+        """JSON answer validated against `schema`. `chain` overrides the role's fallback chain.
+
+        `use_cache=False` forces a fresh call (consistency probes); the answer is still stored."""
         system = system_prompt(instructions, schema)
         return self._run(
-            role, system, user, lambda t: parse_json(t, schema), True, exclude_families, chain
+            role,
+            system,
+            user,
+            lambda t: parse_json(t, schema),
+            True,
+            exclude_families,
+            chain,
+            use_cache,
         )
 
     def text(
@@ -171,6 +181,7 @@ class LLMClient:
         json_mode: bool,
         exclude_families: frozenset[str],
         chain: Sequence[str] | None,
+        use_cache: bool = True,
     ) -> Result[R]:
         meta = CallMeta(role=role)
         for key in chain if chain is not None else self.cfg.roles[role].chain:
@@ -187,7 +198,9 @@ class LLMClient:
             meta.model, meta.family = key, family
             for attempt in range(2):
                 try:
-                    result = self._call(key, self._request(role, key, messages, json_mode), meta)
+                    result = self._call(
+                        key, self._request(role, key, messages, json_mode), meta, use_cache
+                    )
                 except (BudgetExceededError, ProviderError) as exc:
                     meta.errors.append(f"{key}: {exc}")
                     break
@@ -254,9 +267,11 @@ class LLMClient:
                 self.ledger.sleep(waits.pop(0))
                 self.ledger.reserve(key, est)
 
-    def _call(self, key: str, request: ChatRequest, meta: CallMeta) -> ChatResult:
+    def _call(
+        self, key: str, request: ChatRequest, meta: CallMeta, use_cache: bool = True
+    ) -> ChatResult:
         ck = cache_key(key.partition(":")[0], request)
-        hit = self.cache.get(ck)
+        hit = self.cache.get(ck) if use_cache else None
         if hit is not None:
             meta.cached = True
             return hit

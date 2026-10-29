@@ -1,0 +1,288 @@
+{
+  "id": "FRw3Digest000001",
+  "name": "W3 Daily ops digest",
+  "active": true,
+  "nodes": [
+    {
+      "id": "5e8ab25d-11af-5e51-b631-3fbd86558f40",
+      "name": "Every day 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f33b7498-8dc6-5338-872f-1f295a55f45f",
+      "name": "Run now (webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "digest-now",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "fb56fb9f-9e32-5c4a-85f7-3ad1c6022ec0"
+    },
+    {
+      "id": "3da49037-5db2-5650-b17d-4267e3d0767e",
+      "name": "Judge metrics (24 h)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/metrics/judge?window=24h",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a3990cf1-58b2-52f5-a728-8d2d55ebff4d",
+      "name": "Fairness",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/metrics/fairness",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "9dffc7c2-de95-5975-b225-be813978d5ae",
+      "name": "Open handoffs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/handoffs?status=open",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "81b865f9-5c9d-5373-8f0e-4a6590bb2a75",
+      "name": "Escalated handoffs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/handoffs?status=escalated",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "900ef93c-f8b7-570a-964c-ac53831e8e7c",
+      "name": "Format digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Formatting only: turn the API's numbers into a short digest; missing parts become warnings.\nconst warn = [];\nconst get = (name) => {\n  const items = $(name).all().map(i => i.json);\n  if (items.some(j => j.error)) { warn.push(`${name}: unavailable`); return null; }\n  return items;\n};\nconst m = (get('Judge metrics (24 h)') || [])[0];\nconst fair = (get('Fairness') || [])[0];\nconst open = (get('Open handoffs') || []).filter(j => j.ticket_id);\nconst esc = (get('Escalated handoffs') || []).filter(j => j.ticket_id);\nconst lines = ['Flightright daily digest'];\nif (m) {\n  lines.push(`Judgements (24 h): ${m.judgements}`);\n  for (const [tier, d] of Object.entries(m.decisions_by_tier || {})) {\n    const total = Object.values(d).reduce((a, b) => a + b, 0);\n    lines.push(`  ${tier}: ${d.approve || 0}/${total} approved, ${d.revise || 0} revised, ${d.handoff || 0} handed off`);\n  }\n  const pct = (x) => x == null ? 'n/a' : (100 * x).toFixed(0) + '%';\n  lines.push(`Panel disagreement: ${pct(m.panel_disagreement_rate)}; judge unavailable: ${pct(m.judge_unavailable_rate)}; p95 latency: ${m.latency_ms_p95 ?? 'n/a'} ms`);\n  const q = Object.entries(m.quota_today || {}).map(([k, v]) => `${k} ${v.requests}/${v.rpd_limit ?? '?'}`);\n  lines.push('Free-tier usage today: ' + (q.length ? q.join(', ') : 'none'));\n}\nlines.push(`Open handoffs: ${open.length} (SLA breached: ${open.filter(h => h.sla_breached).length}); escalated: ${esc.length}`);\nif (fair) lines.push(fair.available ? 'Fairness: counterfactual gaps available in the console' : 'Fairness: not computed yet');\nif (warn.length) lines.push('Warnings: ' + warn.join('; '));\nreturn [{ json: { text: lines.join('\\n') } }];\n"
+      }
+    },
+    {
+      "id": "54a9b541-1e15-5d36-8a34-692ccfb4c4c6",
+      "name": "Send digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/notifications",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'digest', ticket_id: null, channel: 'log', text: $json.text }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Every day 08:00": {
+      "main": [
+        [
+          {
+            "node": "Judge metrics (24 h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now (webhook)": {
+      "main": [
+        [
+          {
+            "node": "Judge metrics (24 h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Judge metrics (24 h)": {
+      "main": [
+        [
+          {
+            "node": "Fairness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fairness": {
+      "main": [
+        [
+          {
+            "node": "Open handoffs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open handoffs": {
+      "main": [
+        [
+          {
+            "node": "Escalated handoffs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalated handoffs": {
+      "main": [
+        [
+          {
+            "node": "Format digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format digest": {
+      "main": [
+        [
+          {
+            "node": "Send digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": []
+}

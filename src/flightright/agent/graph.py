@@ -537,7 +537,15 @@ def build_graph(
                 state,
                 deps,
                 "handoff.created",
-                {"ticket_id": record.ticket_id, "tier": tier, "reason": reason},
+                {
+                    "ticket_id": record.ticket_id,
+                    "tier": tier,
+                    "urgency": ticket["urgency"],
+                    "reason": reason,
+                    "summary": ticket["summary"],
+                    "sla_minutes": sla,
+                    "sla_due_at": ticket["sla_due_at"],
+                },
             )
         else:
             events = state.get("events", [])

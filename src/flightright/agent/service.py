@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -65,19 +66,35 @@ class ConversationService:
         return cid
 
     def handle_message(
-        self, conversation_id: str, text: str, idempotency_key: str
+        self,
+        conversation_id: str,
+        text: str,
+        idempotency_key: str,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> MessageOutcome:
-        state = self.graph.get_state(self._cfg(conversation_id)).values
+        """Run one turn. `on_event` receives each pipeline event as soon as its node finishes
+        (triage.completed, draft.created, judgement.completed, ...), for live views (SSE)."""
+        config = self._cfg(conversation_id)
+        state = self.graph.get_state(config).values
         if not state:
             raise KeyError(f"unknown conversation {conversation_id}")
         done = state.get("processed", {}).get(idempotency_key)
         if done is not None:  # FR-1.4: duplicate delivery -> same reply, no new actions
             return MessageOutcome(**done, duplicate=True)
-        result = self.graph.invoke(
-            {"incoming": {"text": text, "idempotency_key": idempotency_key}},
-            self._cfg(conversation_id),
-        )
-        return MessageOutcome(**result["outcome"])
+        seen = len(state.get("events", []))
+        incoming = {"incoming": {"text": text, "idempotency_key": idempotency_key}}
+        for update in self.graph.stream(incoming, config, stream_mode="updates"):
+            for node_update in update.values():
+                events = (
+                    (node_update or {}).get("events") if isinstance(node_update, dict) else None
+                )
+                if events and len(events) > seen:
+                    if on_event is not None:
+                        for event in events[seen:]:
+                            on_event(event)
+                    seen = len(events)
+        outcome = self.graph.get_state(config).values["outcome"]
+        return MessageOutcome(**outcome)
 
     def state(self, conversation_id: str) -> dict[str, Any]:
         """Full internal state (ops API only; never returned to passengers)."""

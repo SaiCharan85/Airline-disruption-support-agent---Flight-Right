@@ -1,7 +1,7 @@
 # flightright-agent — Technical Specification
 
 **Author:** Sri Sai Charan
-**Status:** v1.3 (source of truth for what the system does)
+**Status:** v1.4 (source of truth for what the system does)
 **Location in repo:** `docs/SPEC.md`. Requirement changes are recorded in the changelog at the bottom.
 
 ---
@@ -69,7 +69,7 @@ A support system in which:
         └───────────────┬───────────────────────────────────────────┘
                         ▼
         ┌──────────── LangGraph conversation graph ─────────────────┐
-        │ guardrails → triage → context_loader → entitlement_engine  │
+        │ guardrails → context_loader → triage → entitlement_engine  │
         │ → support_agent → code_checks → judge → router             │
         │            ↑ revise (≤2)           ├─ send                 │
         │            └───────────────────────├─ handoff → summary    │
@@ -650,15 +650,16 @@ unverified: []                         # list rule keys pending confirmation
 ## 16. Open questions (resolve at the noted step)
 1. Delay thresholds and other details under the amended regime (Step 1).
 2. ~~LLM, embedding, and tracing providers (Step 0).~~ Resolved: free Groq + Google AI Studio tiers with local Ollama fallback; judge family ≠ agent family; no embeddings (FR-10.5); LangSmith free tier.
-3. Real channel for W1: Telegram or email (Step 10).
-4. Human-action surface for W5: Slack buttons or n8n Form (Step 10).
-5. UI framework (Step 12).
-6. CrewAI for the simulator personas (Step 8; not for the core graph).
+3. ~~Real channel for W1~~ Resolved: generic webhook first; Telegram or email can be added later.
+4. ~~Human-action surface for W5~~ Resolved: n8n Form; notifications logged and shown in the UI.
+5. ~~UI framework~~ Resolved: FastAPI + React.
+6. ~~CrewAI for the simulator~~ Resolved: CrewAI persona agents on the project's LLM client (cache, ledger, fallback); not used in the core graph.
 
 ---
 
 ## Changelog
 - v1.0: initial specification.
 - v1.1 (2026-10-19): zero-cost requirement (G7, NFR-12) and free provider choices (§16 Q2); FR-16 Judge Workbench (human-in-the-loop judge calibration, not RLHF) with API endpoints, `JudgeCorrection` model, and UI screen 8; judge validation based on planted-error controlled pairs + free public human-judgment sets + optional low-effort reviewer input instead of large-scale manual labeling (§10.1, §10.2, §10.4); repo layout (§13).
+- v1.4 (2026-10-29): open questions 3-6 resolved (webhook channel, n8n Form for handoff actions, FastAPI + React UI, CrewAI simulator); conversation graph loads context before triage (triage uses history and booking assistance flags).
 - v1.3 (2026-10-25): no vector retrieval (RAG): FR-10.5 replaced, FR-5.2 tools are keyed lookups (`get_playbook`, `get_passenger_history`), FR-16.3 exemplars chosen by dimension/tier/recency, retrieval and embedding config removed, Step 3 rescoped.
 - v1.2 (2026-10-25): FR-17 Judge Monitor (system-wide live judgement feed, rolling metrics, canary checks, alerts), `/ops/judgements/stream`, windowed `/ops/metrics/judge`, UI screen 9.

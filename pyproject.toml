@@ -4,15 +4,19 @@ version = "0.1.0"
 description = "EU261 flight-disruption support agent gated by a severity-aware, context-reading LLM judge."
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 # Dependencies are added step by step (`uv add ...`) as each step needs them,
 # so CI stays fast and every dependency has a reason to exist.
 dependencies = [
+    "crewai>=1.15",
+    "fastapi>=0.162.0",
     "httpx>=0.28.1",
+    "judgekit",
     "langgraph>=1.2.18",
     "langgraph-checkpoint-sqlite>=3.1.2",
-    "pydantic>=2.14.1",
+    "pydantic>=2.11.9",
     "pyyaml>=6.0.3",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
@@ -50,12 +54,17 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "PTH"]
 # Prompt and message templates: prose stays readable rather than split at 100 columns.
 "src/flightright/agent/drafting.py" = ["E501"]
 "src/flightright/agent/handoff.py" = ["E501"]
+# SQL schema and statements read better unwrapped.
+"src/flightright/api/store.py" = ["E501"]
+"src/flightright/simulator/crew.py" = ["E501"]
 
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Live LLM tests are opt-in: `uv run pytest -m live_llm` (a later -m overrides this one).
 addopts = "-ra --strict-markers --import-mode=importlib -m 'not live_llm'"
+# CrewAI's own internal deprecation notices are not ours to fix.
+filterwarnings = ["ignore::DeprecationWarning:crewai.*"]
 markers = [
     "slow: long-running tests (deselect with -m 'not slow')",
     "live_llm: hits a real LLM API; never run in CI",
@@ -66,3 +75,6 @@ markers = [
 python_version = "3.11"
 strict = true
 files = ["src", "scripts"]
+
+[tool.uv.sources]
+judgekit = { git = "https://github.com/SaiCharan85/JudgeKit", tag = "v0.2.0" }

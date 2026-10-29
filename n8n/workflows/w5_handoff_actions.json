@@ -1,0 +1,336 @@
+{
+  "id": "FRw5Actions00001",
+  "name": "W5 Handoff acknowledge and resolve",
+  "active": true,
+  "nodes": [
+    {
+      "id": "b4daf1d1-5001-5392-8bf8-afc27a2b9e31",
+      "name": "Handoff action form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "path": "handoff-action",
+        "formTitle": "Handoff ticket action",
+        "formDescription": "Acknowledge a ticket, or resolve it with the outcome. The result is stored with the passenger's history.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Ticket ID",
+              "placeholder": "T-...",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Action",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "acknowledge"
+                  },
+                  {
+                    "option": "resolve"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Decision",
+              "placeholder": "e.g. compensation approved (needed to resolve)"
+            },
+            {
+              "fieldLabel": "Compensation paid (EUR)",
+              "fieldType": "number"
+            },
+            {
+              "fieldLabel": "Notes",
+              "fieldType": "textarea"
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "appendAttribution": false,
+          "path": "handoff-action"
+        }
+      },
+      "webhookId": "5f27771e-54a3-57b7-9e4a-58c2dc6a1553"
+    },
+    {
+      "id": "6fa73528-aef4-5bdc-bbb1-8f979c84a8ac",
+      "name": "Action webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        420
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "handoff-action-api",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "c3e12975-968c-5e76-a637-4c6e8c4f4152"
+    },
+    {
+      "id": "6d2b057f-bcb3-5e1d-93f4-f62df9de2f7e",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Mapping only: the form and the webhook send different shapes.\nreturn $input.all().map(item => {\n  const j = item.json;\n  const b = j.body || {};\n  const fromForm = 'Ticket ID' in j;\n  const pick = (formKey, key) => fromForm ? j[formKey] : b[key];\n  const action = String(pick('Action', 'action') || '').toLowerCase();\n  const paid = pick('Compensation paid (EUR)', 'compensation_paid');\n  const out = {\n    source: fromForm ? 'form' : 'webhook',\n    ticket_id: String(pick('Ticket ID', 'ticket_id') || '').trim(),\n    action,\n    decision: String(pick('Decision', 'decision') || '').trim(),\n    notes: String(pick('Notes', 'notes') || ''),\n    compensation_paid: paid === '' || paid == null ? null : Number(paid),\n  };\n  const errors = [];\n  if (!out.ticket_id) errors.push('Ticket ID is required');\n  if (!['acknowledge', 'resolve'].includes(action)) errors.push('Action must be acknowledge or resolve');\n  if (action === 'resolve' && !out.decision) errors.push('Decision is required to resolve a ticket');\n  out.error = errors.join('; ');\n  return { json: out };\n});\n"
+      }
+    },
+    {
+      "id": "cebddebd-e1e7-5689-a09b-f30bb22bcbd2",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bd383fac-686d-564a-893d-e8cb14bd443f",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "e6d31aab-b47c-5a56-9fe7-4f63a085780f",
+      "name": "Resolve?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        680,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cc9beb0e-bc55-508a-9e51-5a02dd93192b",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "resolve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "78276fb9-68f5-500f-9e99-365fa5135469",
+      "name": "Acknowledge ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/handoffs/{{ $json.ticket_id }}/acknowledge",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "390394d7-a644-5fdf-b314-c0f393c271a0",
+      "name": "Resolve ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FLIGHTRIGHT_API_URL }}/ops/handoffs/{{ $json.ticket_id }}/resolve",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $env.OPS_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ decision: $json.decision, notes: $json.notes, compensation_paid: $json.compensation_paid }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1e2d11fc-fc60-5382-8684-0ee009b7202c",
+      "name": "Confirm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Formatting only: confirm back to the person (API errors are shown as-is).\nconst req = $('Normalize').first().json;\nconst r = $input.first().json;\nconst ok = !r.error && r.status;\n// HTTP errors arrive as '<code> - \"<problem+json>\"'; show the problem title.\nconst apiError = () => {\n  const raw = String((r.error && r.error.message) || '');\n  try {\n    let p = JSON.parse(raw.slice(raw.indexOf(' - ') + 3));\n    if (typeof p === 'string') p = JSON.parse(p);\n    return p.title || raw;\n  } catch (e) { return raw || 'unknown error'; }\n};\nconst message = req.error\n  ? `Not sent: ${req.error}`\n  : ok\n    ? `Ticket ${r.ticket_id} is now ${r.status}.`\n    : `The API refused this action: ${apiError()}`;\nreturn [{ json: { ok: Boolean(ok) && !req.error, message, ticket_id: req.ticket_id, status: ok ? r.status : null } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Handoff action form": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "node": "Resolve?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve?": {
+      "main": [
+        [
+          {
+            "node": "Resolve ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acknowledge ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve ticket": {
+      "main": [
+        [
+          {
+            "node": "Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge ticket": {
+      "main": [
+        [
+          {
+            "node": "Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": []
+}

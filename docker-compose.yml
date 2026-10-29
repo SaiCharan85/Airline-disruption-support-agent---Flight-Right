@@ -1,0 +1,50 @@
+# n8n (self-hosted community edition) next to the API. SPEC section 8.1.
+#   docker compose up -d n8n                 # API runs on the host: uv run python -m flightright.api.server
+#   docker compose --profile api up -d       # API in a container as well
+# Secrets come from .env (git-ignored); exported workflows only reference them as $env variables.
+name: flightright
+
+services:
+  n8n:
+    image: n8nio/n8n:2.46.1  # checked: 2026-10-29 (latest 2.x stable)
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Europe/Berlin}
+      TZ: ${GENERIC_TIMEZONE:-Europe/Berlin}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_SECURE_COOKIE: "false"  # plain http on localhost
+      # Code nodes verify HMAC signatures (crypto) and read the settings below via $env.
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      FLIGHTRIGHT_API_URL: ${FLIGHTRIGHT_API_URL:-http://host.docker.internal:8000}
+      FLIGHTRIGHT_CONSOLE_URL: ${FLIGHTRIGHT_CONSOLE_URL:-http://localhost:5173}
+      OPS_API_KEY: ${OPS_API_KEY:?set OPS_API_KEY in .env}
+      N8N_HMAC_SECRET: ${N8N_HMAC_SECRET:?set N8N_HMAC_SECRET in .env}
+      SLA_SECONDS_OVERRIDE: ${SLA_SECONDS_OVERRIDE:-}  # test stack only, e.g. 10
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+
+  api:
+    profiles: ["api"]
+    build: .
+    env_file: .env
+    environment:
+      FLIGHTRIGHT_HOST: 0.0.0.0
+      FLIGHTRIGHT_JUDGE: ${FLIGHTRIGHT_JUDGE:-}  # "placeholder" = code checks only, no judge calls
+      N8N_EVENTS_WEBHOOK_URL: http://n8n:5678/webhook/flightright-events
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - n8n
+
+volumes:
+  n8n_data:
