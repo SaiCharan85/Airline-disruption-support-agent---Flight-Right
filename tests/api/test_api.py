@@ -469,3 +469,14 @@ def test_publisher_without_url_is_a_no_op_and_retries_on_server_errors() -> None
     )
     p.publish("handoff.created", {})
     assert len(calls) == 2 and len(p.failed) == 1 and not p.sent
+
+
+def test_demo_scenarios_endpoint_lists_registered_dev_cases(make) -> None:  # type: ignore[no-untyped-def]
+    s = make([])
+    s.runtime.demo_scenarios = [
+        {"scenario_id": "SC-1", "booking_ref": "ABC123", "gold_tier": "S3"},
+        {"scenario_id": "SC-2", "booking_ref": "DEF456", "gold_tier": "S1"},
+    ]
+    rows = s.http.get("/ops/demo/scenarios?tier=S3", headers=OPS).json()
+    assert [r["scenario_id"] for r in rows] == ["SC-1"]
+    assert s.http.get("/ops/demo/scenarios").status_code == 401

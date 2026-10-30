@@ -24,6 +24,7 @@ class ModelLimits(BaseModel):
     tpd: int | None = None
     otpm: int | None = None  # output tokens per minute (Groq refuses larger max_tokens)
     thinking_tokens: int = 0  # added on top of the role cap for models that always think first
+    tpm_input_only: bool = False  # the provider's per-minute token limit counts input tokens only
 
 
 class RoleConfig(BaseModel):

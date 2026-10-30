@@ -57,6 +57,8 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "PTH"]
 # SQL schema and statements read better unwrapped.
 "src/flightright/api/store.py" = ["E501"]
 "src/flightright/simulator/crew.py" = ["E501"]
+# Report tables: one row per line reads better than wrapped cells.
+"scripts/eval_report.py" = ["E501"]
 
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]

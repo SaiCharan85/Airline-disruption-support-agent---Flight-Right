@@ -15,7 +15,7 @@ regime:
 # Newer Google models seen 2026-10-25, not yet evaluated: gemini-4-argon, gemini-3.7-flash, gemini-3.6-flash.
 models:
   checked: "2026-10-25"
-  limits_checked: "2026-10-06"
+  limits_checked: "2026-10-29"   # gemini-3.8-flash rpd and Google input-only TPM from 429 bodies
   safety_margin: 0.9
   day_reset_utc_offset_hours: -8      # daily quotas reset at Pacific midnight
   timeout_s: 90
@@ -30,10 +30,13 @@ models:
     "groq:openai/gpt-oss-20b": {family: gpt-oss, efforts: [low, medium, high], rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000}
     # Groq refuses requests whose max_tokens exceeds the output-tokens-per-minute limit
     "groq:qwen/qwen3.8-27b": {family: qwen, rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000, otpm: 1000}
-    "google:gemini-3.8-flash": {family: gemini, efforts: [minimal, low, medium, high], rpm: 10, rpd: 250, tpm: 250000}
-    "google:gemini-3.5-flash-lite": {family: gemini, efforts: [minimal, low, medium, high], rpm: 15, rpd: 1000, tpm: 250000}
+    # rpd 20: the free tier's daily request limit reported in a 429 on 2026-10-29 (was 250)
+    "google:gemini-3.8-flash": {family: gemini, efforts: [minimal, low, medium, high], rpm: 10, rpd: 20, tpm: 250000, tpm_input_only: true}
+    "google:gemini-3.5-flash-lite": {family: gemini, efforts: [minimal, low, medium, high], rpm: 15, rpd: 1000, tpm: 250000, tpm_input_only: true}
     # Gemma 4 always thinks first (<thought> block); thinking_tokens is added on top of each role's cap
-    "google:gemma-4-26b-a4b-it": {family: gemma, rpm: 15, rpd: 7200, tpm: 15000, thinking_tokens: 2048}
+    # Google's free per-minute token limit counts input tokens (429 metric
+    # generate_content_free_tier_input_token_count, seen 2026-10-29).
+    "google:gemma-4-26b-a4b-it": {family: gemma, rpm: 15, rpd: 7200, tpm: 15000, thinking_tokens: 2048, tpm_input_only: true}
   # Draft role chains (tuned in Steps 5-8). judge_a / judge_b never share the agent's family (FR-8.8).
   roles:
     # gpt-oss first, Gemma as fallback: the scenario messages were written by gemini-3.5-flash-lite,

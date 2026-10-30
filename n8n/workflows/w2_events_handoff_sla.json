@@ -148,7 +148,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "// Formatting only. SLA_SECONDS_OVERRIDE shortens the wait in the test stack.\nconst console = ($env.FLIGHTRIGHT_CONSOLE_URL || 'http://localhost:5173').replace(/\\/$/, '');\nconst override = Number($env.SLA_SECONDS_OVERRIDE || 0);\nreturn $input.all().map(item => {\n  const p = item.json.payload;\n  const minutes = Number(p.sla_minutes || 60);\n  return { json: {\n    ticket_id: p.ticket_id,\n    tier: p.tier,\n    wait_seconds: override > 0 ? override : minutes * 60,\n    text: `New ${p.tier} handoff ${p.ticket_id} (${p.urgency || 'soon'}, reply due within ${minutes} min). `\n      + `Reason: ${p.reason}. ${p.summary || ''} Open: ${console}/handoffs/${p.ticket_id}`,\n  } };\n});\n"
+        "jsCode": "// Formatting only. SLA_SECONDS_OVERRIDE shortens the wait in the test stack.\nconst console = ($env.FLIGHTRIGHT_CONSOLE_URL || 'http://localhost:5173').replace(/\\/$/, '');\nconst override = Number($env.SLA_SECONDS_OVERRIDE || 0);\nreturn $input.all().map(item => {\n  const p = item.json.payload;\n  const minutes = Number(p.sla_minutes || 60);\n  return { json: {\n    ticket_id: p.ticket_id,\n    tier: p.tier,\n    wait_seconds: override > 0 ? override : minutes * 60,\n    text: `New ${p.tier} handoff ${p.ticket_id} (${p.urgency || 'soon'}, reply due within ${minutes} min). `\n      + `Reason: ${p.reason}. ${p.summary || ''} Open: ${console}/#/handoffs (ticket ${p.ticket_id})`,\n  } };\n});\n"
       }
     },
     {

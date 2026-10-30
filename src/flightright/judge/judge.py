@@ -54,16 +54,20 @@ def render_case(
     entitlement: Entitlement | None,
     checks: list[CheckResult],
     target: Target,
+    triage_context: bool = True,
 ) -> str:
-    """Everything the judge reads besides the draft itself (FR-8.2)."""
+    """Everything the judge reads besides the draft itself (FR-8.2). `triage_context=False` drops
+    the severity lines (the fixed-strictness baseline of the headline experiment, SPEC §10.3)."""
     e = entitlement
-    lines = [
-        f"What is being judged: {target.replace('_', ' ')}",
-        f"Severity: {triage.tier}; urgency: {triage.urgency}; frustration {triage.frustration}/5; "
-        f"special needs: {', '.join(triage.vulnerability_flags) or 'none'}; "
-        f"earlier contacts about this booking: {triage.repeat_contact_count}",
-        f"Triage reasons: {'; '.join(triage.reasons[:6]) or 'none'}",
-    ]
+    lines = [f"What is being judged: {target.replace('_', ' ')}"]
+    if triage_context:
+        lines += [
+            f"Severity: {triage.tier}; urgency: {triage.urgency}; "
+            f"frustration {triage.frustration}/5; "
+            f"special needs: {', '.join(triage.vulnerability_flags) or 'none'}; "
+            f"earlier contacts about this booking: {triage.repeat_contact_count}",
+            f"Triage reasons: {'; '.join(triage.reasons[:6]) or 'none'}",
+        ]
     if e is not None:
         comp = (
             f"EUR {e.compensation_eur}"
@@ -112,8 +116,14 @@ class SeverityAwareJudge:
         exemplars: ExemplarProvider | None = None,
         use_cache: bool = True,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        fixed_profile: str | None = None,
+        triage_context: bool = True,
     ) -> None:
+        """`fixed_profile` + `triage_context=False` give the fixed-strictness baseline: one bar
+        for every reply, no panel unless that profile has one, no severity context."""
         self.rubric = rubric or load_airline_rubric()
+        self.fixed_profile = fixed_profile
+        self.triage_context = triage_context
         self.author_families = (
             author_families  # FR-8.8: never judged by the agent's own model family
         )
@@ -135,9 +145,12 @@ class SeverityAwareJudge:
         families = frozenset(client.family_of(k) for k in client.cfg.roles["agent"].chain)
         return cls(client, author_families=families, **kw)
 
-    @staticmethod
-    def profile_for(triage: TriageResult, target: Target) -> str:
-        return "S4" if target != "reply" or triage.tier == "S4" else triage.tier
+    def profile_for(self, triage: TriageResult, target: Target) -> str:
+        if target != "reply":
+            return "S4"
+        if self.fixed_profile is not None:
+            return self.fixed_profile
+        return "S4" if triage.tier == "S4" else triage.tier
 
     def evaluate(
         self,
@@ -182,6 +195,7 @@ class SeverityAwareJudge:
             entitlement=entitlement,
             checks=checks,
             target=target,
+            triage_context=self.triage_context,
         )
         exemplars = list(self.exemplars(profile, target)) if self.exemplars else []
         panel_size = self.rubric.profile(profile).panel
@@ -268,10 +282,12 @@ class SeverityAwareJudge:
                 "members": [m.judge_id for m in verdict.members],
                 "disagreement": disagreement,
                 "member_passed": [d.passed for d in member_decisions],
+                "member_scores": [[r.model_dump() for r in m.results] for m in verdict.members],
             }
             if verdict.members
             else None,
             "models": {c.model: c.family for c in verdict.calls},
+            "model_calls": len(verdict.calls),
             "error": verdict.error or None,
             "rubric_id": f"{self.rubric.name}@{self.rubric.version}",
             "prompt_version": PROMPT_VERSION,

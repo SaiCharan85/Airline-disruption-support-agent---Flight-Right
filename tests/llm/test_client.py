@@ -96,6 +96,14 @@ def test_short_rate_limit_waits_and_retries_same_model() -> None:
     assert len(prov["a"].requests) == 2
 
 
+def test_repeated_short_rate_limits_are_waited_out_then_fall_back() -> None:
+    limited = [RateLimitedError("429", retry_after_s=5)]
+    client, prov, _ = scripted_client(limited * 3 + [GOOD])
+    assert _call(client).meta.model == "a:m1" and len(prov["a"].requests) == 4
+    client, prov, _ = scripted_client(limited * 4, [GOOD])
+    assert _call(client).meta.model == "b:m2" and len(prov["a"].requests) == 4
+
+
 def test_long_rate_limit_moves_on() -> None:
     client, _, _ = scripted_client([RateLimitedError("429", retry_after_s=600)], [GOOD])
     assert _call(client).meta.model == "b:m2"

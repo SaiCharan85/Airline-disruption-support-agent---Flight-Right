@@ -32,6 +32,37 @@ def test_FR_1_1_happy_path_answers_with_care_vouchers(make: Make) -> None:
     } <= set(_events(h, cid))
 
 
+def test_FR_17_1_judgement_event_carries_the_monitor_summary(make: Make) -> None:
+    rec = {
+        "judgement_id": "J-1",
+        "severity_tier": "S3",
+        "verdict": "acceptable",
+        "decision": "revise",
+        "failures": [{"dimension": "tone", "reason": "score 3 below 4"}],
+        "scores": [{"id": "tone", "evidence": "So sorry!", "kind": "scale", "score": 3}],
+        "latency_ms": 1200,
+        "models": {"m1": "fam"},
+        "panel": {"disagreement": True},
+    }
+    h = make(
+        [GOOD_DRAFT, GOOD_DRAFT],
+        judge=ScriptedJudge(
+            [
+                JudgeVerdict(decision="revise", revision_guidance=["warmer"], judgement=rec),
+                JudgeVerdict(decision="approve"),
+            ]
+        ),
+    )
+    cid = h.start()
+    h.service.handle_message(cid, "My flight to Lisbon is delayed, what now?", "m1")
+    first = next(e for e in h.service.state(cid)["events"] if e["event"] == "judgement.completed")[
+        "payload"
+    ]
+    assert first["judgement_id"] == "J-1" and first["tier"] == "S3"
+    assert first["failed_dimensions"] == ["tone"] and first["evidence"] == "So sorry!"
+    assert first["panel_disagreement"] is True and first["models"] == ["m1"]
+
+
 def test_FR_7_6_failed_code_check_forces_revision_then_approves(make: Make) -> None:
     bad = GOOD_DRAFT.replace("EUR 400", "EUR 600")
     h = make([bad, GOOD_DRAFT])

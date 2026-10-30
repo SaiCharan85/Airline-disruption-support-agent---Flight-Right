@@ -347,3 +347,28 @@ def test_graph_hands_off_when_the_judge_is_down(engine: EntitlementEngine) -> No
     assert (
         out.status == "handed_off" and h.service.state(cid)["ticket"]["reason"] == "judge_handoff"
     )
+
+
+def test_SPEC_10_3_fixed_strictness_baseline_uses_one_bar_and_no_triage_context(
+    engine: EntitlementEngine,
+) -> None:
+    j, pa, pb = judge([answer(score=3), answer()])
+    fixed = SeverityAwareJudge(
+        j.judge_a.llm.client,  # type: ignore[attr-defined]
+        author_families=frozenset({"agent_family"}),
+        fixed_profile="S2",
+        triage_context=False,
+    )
+    v = run(fixed, tier="S3", engine=engine)
+    assert v.judgement["severity_tier"] == "S2" and v.judgement["panel"] is None
+    assert v.decision == "approve" and pb.requests == []  # no panel, S2 bar met with 3s
+    prompt = pa.requests[0].messages[1].content
+    assert "Severity:" not in prompt and "earlier contacts" not in prompt
+    assert run(fixed, target="handoff_summary", engine=engine).judgement["severity_tier"] == "S4"
+
+
+def test_panel_record_keeps_each_members_scores(engine: EntitlementEngine) -> None:
+    j, _, _ = judge([answer()], [answer(low="tone")])
+    panel = run(j, tier="S3", engine=engine).judgement["panel"]
+    tone = [next(s for s in m if s["id"] == "tone")["score"] for m in panel["member_scores"]]
+    assert tone == [5, 2]

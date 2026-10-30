@@ -120,6 +120,25 @@ def _event(state: State, deps: Deps, name: str, payload: dict[str, Any]) -> list
     ]
 
 
+def _judgement_summary(rec: dict[str, Any]) -> dict[str, Any]:
+    """What the Judge Monitor's live feed shows per judgement (FR-17.1)."""
+    if not rec:
+        return {}
+    failures = rec.get("failures", [])
+    first = next((s for s in rec.get("scores", []) if s.get("evidence")), None)
+    return {
+        "judgement_id": rec.get("judgement_id"),
+        "tier": rec.get("severity_tier"),
+        "verdict": rec.get("verdict"),
+        "judge_decision": rec.get("decision"),
+        "failed_dimensions": sorted({f["dimension"] for f in failures if f["dimension"] != "*"}),
+        "evidence": (first or {}).get("evidence", "")[:160],
+        "latency_ms": rec.get("latency_ms"),
+        "models": list((rec.get("models") or {}).keys()),
+        "panel_disagreement": bool((rec.get("panel") or {}).get("disagreement")),
+    }
+
+
 def build_graph(
     deps: Deps, checkpointer: Checkpointer = None
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
@@ -489,7 +508,11 @@ def build_graph(
                 state,
                 deps,
                 "judgement.completed",
-                {"decision": route, "code_check_failures": [f.check_id for f in failed]},
+                {
+                    "decision": route,
+                    "code_check_failures": [f.check_id for f in failed],
+                    **_judgement_summary(verdict.judgement),
+                },
             ),
         }
         if route == "finish":

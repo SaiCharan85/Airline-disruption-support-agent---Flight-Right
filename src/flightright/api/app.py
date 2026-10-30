@@ -412,6 +412,7 @@ def create_app(runtime: Runtime, api_key: str, admin_key: str) -> FastAPI:
         record = {
             **body.model_dump(),
             "tier": j["tier"],
+            "rubric_id": rec.get("rubric_id"),
             "original_scores": original,
             "original_decision": j["decision"],
             "excerpt": (attempt or {}).get("draft", "")[:400],
@@ -516,6 +517,14 @@ def create_app(runtime: Runtime, api_key: str, admin_key: str) -> FastAPI:
         kind: str | None = None, ticket_id: str | None = None
     ) -> list[dict[str, Any]]:
         return runtime.store.notifications(kind, ticket_id)
+
+    @app.get("/ops/demo/scenarios", dependencies=[Depends(ops)])
+    def demo_scenarios(
+        tier: str | None = None, limit: int = Query(default=60, le=500)
+    ) -> list[Any]:
+        """Dev-split cases whose bookings are registered, for the console's chat (never test)."""
+        rows = [s for s in runtime.demo_scenarios if tier is None or s["gold_tier"] == tier]
+        return rows[:limit]
 
     @app.post("/ops/bookings", status_code=201, dependencies=[Depends(ops)])
     def register_booking(body: BookingIn) -> dict[str, str]:

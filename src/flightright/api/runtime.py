@@ -188,6 +188,7 @@ class Runtime:
             os.environ.get("N8N_EVENTS_WEBHOOK_URL") or None, os.environ.get("N8N_HMAC_SECRET", "")
         )
         self.booking_clocks: dict[str, datetime] = {}
+        self.demo_scenarios: list[dict[str, Any]] = []  # dev-split cases offered by the console
         self.airline = MockAirline(
             cfg.authority, ActionStore(self.options.actions_path), seed=cfg.seed, clock=self.now
         )
@@ -197,6 +198,17 @@ class Runtime:
             and (ROOT / "data" / "scenarios" / "scenarios.jsonl").is_file()
         ):
             for s in load_scenarios("dev"):
+                self.demo_scenarios.append(
+                    {
+                        "scenario_id": s.scenario_id,
+                        "booking_ref": s.booking_ref,
+                        "gold_tier": s.gold_tier,
+                        "disruption_type": s.case.disruption_type,
+                        "timing": s.situation.timing,
+                        "passenger_name": s.persona.name,
+                        "opening_message": s.opening_message,
+                    }
+                )
                 self.register_booking(
                     Booking(
                         booking_ref=s.booking_ref,

@@ -51,10 +51,20 @@ def test_minute_window_waits_instead_of_failing() -> None:
     clock = FakeClock()
     ledger = _ledger(clock=clock, rpm=2, rpd=100, tpd=10**6)
     for _ in range(2):
-        ledger.reserve("m", 1)
-        ledger.record("m", 1)
+        ledger.record("m", 1, ledger.reserve("m", 1))
     ledger.reserve("m", 1)  # third call in the same minute must wait ~60 s
     assert clock.slept and sum(clock.slept) >= 59
+
+
+def test_minute_window_counts_calls_still_in_flight() -> None:
+    """Parallel callers: an admitted call books its estimate before it finishes."""
+    clock = FakeClock()
+    ledger = _ledger(clock=clock, rpm=100, rpd=100, tpd=10**6, tpm=100)
+    first = ledger.reserve("m", 60)  # in flight, not yet recorded
+    ledger.reserve("m", 60)  # would exceed 100 tokens this minute: must wait
+    assert clock.slept and sum(clock.slept) >= 59
+    ledger.record("m", 40, first)  # settling replaces the estimate, no double count
+    assert sum(t for _, t in ledger._minute["m"]) == 100
 
 
 def test_single_call_over_tpm_refused() -> None:
@@ -94,3 +104,13 @@ def test_cache_roundtrip_and_persistence(tmp_path: Path) -> None:
     again = LLMCache(path).get("k")
     assert again is not None and again.text == "x" and again.total_tokens == 5
     assert again.latency_s == 0 and len(LLMCache(path)) == 1
+
+
+def test_input_only_minute_limit_settles_with_prompt_tokens() -> None:
+    clock = FakeClock()
+    ledger = _ledger(clock=clock, rpm=100, rpd=100, tpd=10**6, tpm=100)
+    b = ledger.reserve("m", 30)
+    ledger.record("m", 500, b, minute_tokens=30)  # 500 in total today, 30 count this minute
+    assert ledger.today("m") == (1, 500) and sum(t for _, t in ledger._minute["m"]) == 30
+    ledger.reserve("m", 60)  # fits: 30 + 60 <= 100
+    assert clock.slept == []

@@ -15,6 +15,7 @@ import json
 import random
 import sys
 from collections import Counter
+from typing import Any
 
 from flightright.agent.live import live_engine, load_scenarios, service_for
 from flightright.config import ROOT, load_config, load_env
@@ -42,7 +43,13 @@ def main() -> int:
     rng = random.Random(cfg.seed)
     pool = [s for s in load_scenarios(args.split) if s.counterfactual_group is None]
     rng.shuffle(pool)
-    chosen = pool[: args.n]
+    # Stratified by tier (round-robin S1-S3), as in docs/eval_protocol.md section 6.
+    by_tier = {t: [s for s in pool if s.gold_tier == t] for t in ("S1", "S2", "S3")}
+    chosen: list[Any] = []
+    while len(chosen) < args.n and any(by_tier.values()):
+        for t in ("S1", "S2", "S3"):
+            if by_tier[t] and len(chosen) < args.n:
+                chosen.append(by_tier[t].pop())
     per_turn = 3  # triage + draft + judge (more with revisions / the S3 panel)
     print(
         f"{len(chosen)} {args.split} scenarios {dict(Counter(s.gold_tier for s in chosen))}; up to "

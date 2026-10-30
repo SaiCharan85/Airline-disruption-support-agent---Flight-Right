@@ -37,6 +37,7 @@ T = TypeVar("T", bound=BaseModel)
 R = TypeVar("R")
 
 MAX_RATE_LIMIT_WAIT_S = 30.0
+RATE_LIMIT_RETRIES = 3  # per-minute 429s are waited out (each wait at most MAX_RATE_LIMIT_WAIT_S)
 TRANSIENT_RETRY_WAITS_S = (5.0, 15.0)  # waits before retrying the same model after a 5xx
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 # Some models (e.g. Gemma 4 on AI Studio) always think first, inline as <thought>...</thought>.
@@ -248,24 +249,27 @@ class LLMClient:
 
     def _chat_with_retries(
         self, provider: ChatProvider, key: str, request: ChatRequest, est: int
-    ) -> ChatResult:
-        """One short rate-limit wait, or up to two waits after a transient server error."""
+    ) -> tuple[ChatResult, list[float]]:
+        """Up to RATE_LIMIT_RETRIES short rate-limit waits, or two waits after a transient
+        server error. Returns the result and the ledger booking of the call that succeeded."""
         waits = list(TRANSIENT_RETRY_WAITS_S)
+        limited = 0
+        booking = self.ledger.reserve(key, est)
         while True:
             try:
-                return provider.chat(request)
+                return provider.chat(request), booking
             except RateLimitedError as exc:
                 wait = exc.retry_after_s
-                if wait is None or wait > MAX_RATE_LIMIT_WAIT_S:
+                limited += 1
+                if wait is None or wait > MAX_RATE_LIMIT_WAIT_S or limited > RATE_LIMIT_RETRIES:
                     raise
                 self.ledger.sleep(wait)
-                self.ledger.reserve(key, est)
-                return provider.chat(request)
+                booking = self.ledger.reserve(key, est)
             except TransientProviderError:
                 if not waits:
                     raise
                 self.ledger.sleep(waits.pop(0))
-                self.ledger.reserve(key, est)
+                booking = self.ledger.reserve(key, est)
 
     def _call(
         self, key: str, request: ChatRequest, meta: CallMeta, use_cache: bool = True
@@ -276,10 +280,17 @@ class LLMClient:
             meta.cached = True
             return hit
         provider = self.providers[key.partition(":")[0]]
-        est = estimate_tokens("".join(m.content for m in request.messages)) + request.max_tokens
-        self.ledger.reserve(key, est)
-        result = self._chat_with_retries(provider, key, request, est)
-        self.ledger.record(key, result.total_tokens or est)
+        input_only = self.cfg.catalog[key].tpm_input_only
+        est = estimate_tokens("".join(m.content for m in request.messages)) + (
+            0 if input_only else request.max_tokens
+        )
+        result, booking = self._chat_with_retries(provider, key, request, est)
+        self.ledger.record(
+            key,
+            result.total_tokens or est,
+            booking,
+            minute_tokens=(result.prompt_tokens or est) if input_only else None,
+        )
         self.cache.put(ck, result)
         meta.cached = False
         return result
